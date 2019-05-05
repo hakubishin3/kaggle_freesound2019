@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import random
 import torch
 import pathlib
 import torch
@@ -45,12 +46,71 @@ class ToTensor(object):
         return data
 
 
+def freq_mask(data, F=30, num_masks=1, replace_with_zero=False):
+    spec = data.copy()   # data.shape = (3, n_mel, xx)
+    num_mel_channels = spec.shape[1]
+
+    mask_value_list = []
+    for i_channel in range(spec.shape[0]):
+        mask_value_list.append(spec[i_channel].mean())
+
+    for i in range(num_masks):
+        f = random.randrange(0, F)
+        f_zero = random.randrange(0, num_mel_channels - f)
+
+        if f_zero == f_zero + f:
+            # avoids randrange error if values are equal and range is empty
+            return spec
+
+        mask_end = random.randrange(f_zero, f_zero + f)
+        if replace_with_zero:
+            for i_channel in range(spec.shape[0]):
+                spec[i_channel, f_zero:mask_end, :] = 0
+        else:
+            for i_channel in range(spec.shape[0]):
+                # mask_value = np.random.rand()
+                mask_value = mask_value_list[i_channel]
+                spec[i_channel, f_zero:mask_end, :] = mask_value
+
+    return spec
+
+
+def time_mask(data, T=30, num_masks=1, replace_with_zero=False):
+    spec = data.copy()   # data.shape = (3, n_mel, xx)
+    len_spectro = spec.shape[2]
+
+    mask_value_list = []
+    for i_channel in range(spec.shape[0]):
+        mask_value_list.append(spec[i_channel].mean())
+
+    for i in range(num_masks):
+        t = random.randrange(0, T)
+        t_zero = random.randrange(0, len_spectro - t)
+
+        if t_zero == t_zero + t:
+            # avoids randrange error if values are equal and range is empty
+            return spec
+
+        mask_end = random.randrange(t_zero, t_zero + t)
+        if replace_with_zero:
+            for i_channel in range(spec.shape[0]):
+                spec[i_channel, :, t_zero:mask_end] = 0
+        else:
+            for i_channel in range(spec.shape[0]):
+                # mask_value = np.random.rand()
+                mask_value = mask_value_list[i_channel]
+                spec[i_channel, :, t_zero:mask_end] = mask_value
+
+    return spec
+
+
 class FAT_TrainSet_logmel(Dataset):
-    def __init__(self, config, dataframe, labels, transform=None):
+    def __init__(self, config, dataframe, labels, specAug, transform=None):
         self.config = config
         self.dataframe = dataframe
         self.labels = labels
         self.transform = transform
+        self.specAug = specAug
 
     def __len__(self):
         return len(self.dataframe)
@@ -65,13 +125,19 @@ class FAT_TrainSet_logmel(Dataset):
         label = torch.from_numpy(self.labels[idx]).float()
 
         # specAugment
-        # normalizeの後に実行すること
-        # ~~~~
+        # ※ normalizeの後に実行すること
+        if self.specAug:
+            F = self.config['model']['specAug']['F']
+            F_num_masks = self.config['model']['specAug']['F_num_masks']
+            T = self.config['model']['specAug']['T']
+            T_num_masks = self.config['model']['specAug']['T_num_masks']
+            replace_with_zero = self.config['model']['specAug']['replace_with_zero']
+            data = time_mask(
+                freq_mask(data, F=F, num_masks=F_num_masks, replace_with_zero=replace_with_zero),
+                T=T, num_masks=T_num_masks, replace_with_zero=replace_with_zero
+            )
 
-        # convert to Image
-        # image = Image.fromarray(data, mode='RGB')
         if self.transform is not None:
-            # image = self.transform(image).div_(255)
             data = self.transform(data)
 
         return data, label

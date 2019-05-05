@@ -13,7 +13,7 @@ from src.utils import get_module_logger, seed_everything, save_json, calculate_p
 from src.data_loader import get_meta_data, ToTensor, FAT_TrainSet_logmel, FAT_TestSet_logmel
 from src.data_transform import wav_to_logmel
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
-from src.loss_func import BCEWithLogitsLoss
+from src.loss_func import BCEWithLogitsLoss, FocalLoss
 from src.optimizers import opt_Adam, opt_SGD
 from src.schedulers import sche_CosineAnnealingLR
 from src.train import train_on_fold, predict_model
@@ -24,7 +24,7 @@ MODEL_map = {
 
 LOSS_map = {
     'BCEWithLogitsLoss': BCEWithLogitsLoss,
-    'FocalLoss': 'after_soon...'
+    'FocalLoss': FocalLoss
 }
 
 OPTIMIZER_map = {
@@ -188,11 +188,11 @@ def main():
             ])
             trnSet = FAT_TrainSet_logmel(
                 config=config, dataframe=trn_set, labels=y_trn,
-                transform=train_transform
+                specAug=config['model']['specAug']['enabled'], transform=train_transform
             )
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
-                transform=val_transform
+                specAug=False, transform=val_transform
             )
 
         trn_loader = DataLoader(
@@ -218,12 +218,10 @@ def main():
         torch.backends.cudnn.benchmark = True
 
         # train model
-        """
         train_on_fold(
             model, trn_loader, val_loader,
             criterion, optimizer, scheduler, config, i_fold, logger
         )
-        """
 
         time_on_fold = time.strftime('%Hh:%Mm:%Ss', time.gmtime(time.time() - end))
         logger.info(f'--------------Time on fold {i_fold+1}: {time_on_fold}--------------\n')
@@ -246,7 +244,7 @@ def main():
             ])
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
-                transform=val_transform
+                specAug=False, transform=val_transform
             )
         val_loader = DataLoader(
             valSet, batch_size=config['model']['params']['batch_size'],
@@ -268,6 +266,7 @@ def main():
                     x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
                 output = model(x_batch)
                 preds_list.append(torch.sigmoid(output).cpu().numpy())
+                # preds_list.append(output.cpu().numpy())
                 target_list.append(y_batch.cpu().numpy())
 
     all_preds = np.concatenate(preds_list)
@@ -311,14 +310,13 @@ def main():
         test_preds += test_preds_one_fold / n_splits
 
     test[labels] = test_preds
-    import pdb; pdb.set_trace()
     test.to_csv(model_output_dir / 'submission.csv', index=False)
 
     # =========================================
     # === Save
     # =========================================
-    # save_path = model_output_dir / 'output.json'
-    # save_json(config, save_path, logger)
+    save_path = model_output_dir / 'output.json'
+    save_json(config, save_path, logger)
 
 
 if __name__ == '__main__':

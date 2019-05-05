@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 from .utils import get_module_logger, calculate_per_class_lwlrap, seed_everything
 
-seed_everything(71)
-
 
 def train_on_fold(model, trn_loader, val_loader,
                   criterion, optimizer, scheduler, config, i_fold, logger):
@@ -69,6 +67,7 @@ def train_one_epoch(model, trn_loader, criterion, optimizer, config):
         losses += loss.item() / len(trn_loader)
 
         preds_list.append(torch.sigmoid(output).cpu().detach().numpy())
+        # preds_list.append(output.cpu().detach().numpy())
         target_list.append(y_batch.cpu().numpy())
 
     all_preds = np.concatenate(preds_list)
@@ -97,6 +96,7 @@ def val_on_fold(model, val_loader, criterion, config):
             losses += loss.item() / len(val_loader)
 
             preds_list.append(torch.sigmoid(output).cpu().numpy())
+            # preds_list.append(output.cpu().numpy())
             target_list.append(y_batch.cpu().numpy())
 
     all_preds = np.concatenate(preds_list)
@@ -118,6 +118,7 @@ def predict_model(model, test_loader, n_classes):
             x_batch = x_batch.cuda()
             output = model(x_batch)
             preds_list.append(torch.sigmoid(output).cpu().numpy())
+            # preds_list.append(output.cpu().numpy())
             fname_list.extend(fnames)
 
     test_preds = pd.DataFrame(
