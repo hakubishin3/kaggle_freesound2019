@@ -3,16 +3,22 @@ import torch
 import pathlib
 import numpy as np
 import pandas as pd
-from .utils import get_module_logger, calculate_per_class_lwlrap, seed_everything
+from .utils import EarlyStopping, calculate_per_class_lwlrap, seed_everything
 
 
 def train_on_fold(model, trn_loader, val_loader,
                   criterion, optimizer, scheduler, config, i_fold, logger):
-    # get logger
-    # logger = get_module_logger(__name__)
-
     best_lwlrap = 0
+    best_loss = 0
+    best_lwlrap_train = 0
+    best_loss_train = 0
     train_result = {}
+
+    # initialize the early_stopping object
+    patience = config['model']['params']['early_stopping_patience']
+    filename = pathlib.Path(config['model_output_dir']) / f'weight_best_fold{i_fold+1}.pt'
+    early_stopping = EarlyStopping(filename=filename, patience=patience, verbose=True)
+    logger.info(f'model_name: {filename}')
 
     for i_epoch in range(config['model']['params']['n_epochs']):
         end = time.time()
@@ -30,15 +36,28 @@ def train_on_fold(model, trn_loader, val_loader,
             logger.info(f'Fold {i_fold+1} Epoch {i_epoch+1}: Time {elapsed_time:.0f}s, lr {new_lr:.4g}, train_losses:{train_losses:.4f}, train_lwlrap:{train_lwlrap:.4f}, val_losses:{val_losses:.4f}, val_lwlrap:{val_lwlrap:.4f}')
 
         if val_lwlrap > best_lwlrap:
-            logger.info(f'updated: {best_lwlrap} -> {val_lwlrap}')
             best_epoch = i_epoch + 1
             best_lwlrap = val_lwlrap
-            torch.save(model.state_dict(), pathlib.Path(config['model_output_dir']) / f'weight_best_fold{i_fold+1}.pt')
+            best_loss = val_losses
+            best_lwlrap_train = train_lwlrap
+            best_loss_train = train_losses
 
+        # early_stopping needs the validation loss to check if it has decresed, and if it has, it will make a checkpoint of the current model
+        early_stopping(val_lwlrap, model)
+
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+
+    # summary
+    best_lwlrap = early_stopping.best_score
     config.update({
         f'train_result_fold{i_fold+1}': {
             'best_epoch': best_epoch,
-            'best_lwlrap': best_lwlrap
+            'best_lwlrap': best_lwlrap,
+            'best_loss': best_loss,
+            'best_lwlrap_train': best_lwlrap_train,
+            'best_loss_train': best_loss_train
         }
     })
 
@@ -54,6 +73,21 @@ def train_one_epoch(model, trn_loader, criterion, optimizer, config):
     for i, (x_batch, y_batch) in enumerate(trn_loader):
         if config['model']['mixup']['enabled']:
             x_batch, y_batch = mixup(x_batch, y_batch, alpha=config['model']['mixup']['alpha'])
+
+        # mixupの後に実行すること
+        """
+        if config['model']['specAug']['enabled']:
+            F = self.config['model']['specAug']['F']
+            F_num_masks = self.config['model']['specAug']['F_num_masks']
+            T = self.config['model']['specAug']['T']
+            T_num_masks = self.config['model']['specAug']['T_num_masks']
+            replace_with_zero = self.config['model']['specAug']['replace_with_zero']
+            for i_data in range(x_batch.size()[0]):
+                x_batch[i_data] = time_mask(
+                    freq_mask(x_batch[i_data], F=F, num_masks=F_num_masks, replace_with_zero=replace_with_zero),
+                    T=T, num_masks=T_num_masks, replace_with_zero=replace_with_zero
+                )
+        """
 
         if config['model']['params']['cuda']:
             x_batch, y_batch = x_batch.cuda(), y_batch.cuda()
