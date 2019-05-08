@@ -5,6 +5,7 @@ import argparse
 import random
 import torch
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -57,12 +58,13 @@ def main():
 
     # get config
     config = json.load(open(args.config))
-    args_log = {'args': {
-        'config': args.config,
-        'debug_mode': args.debug,
-        'force': args.force
-    }}
-    config.update(args_log)
+    config.update({
+        'args': {
+            'config': args.config,
+            'debug_mode': args.debug,
+            'force': args.force
+        }
+    })
 
     # make model-output-dir
     output_dir = config['dataset']['output_directory']
@@ -72,8 +74,9 @@ def main():
         model_output_dir.mkdir()
     logger.info(f'model_output_dir: {str(model_output_dir)}')
     logger.debug(f'model_output_dir exists: {model_output_dir.exists()}')
-    args_log = {'model_output_dir': str(model_output_dir)}
-    config.update(args_log)
+    config.update({
+        'model_output_dir': str(model_output_dir)
+    })
 
     # fix seed
     seed_everything(71)
@@ -122,9 +125,9 @@ def main():
         if args.force:
             logger.info('make features.')
             logger.debug(f'train data processing. {len(train_wavelist)}')
-            wav_to_logmel(train_wavelist, fe_params, fe_dir)
+            wav_to_logmel(train_wavelist, config, fe_dir)
             logger.debug(f'test data processing. {len(test_wavelist)}')
-            wav_to_logmel(test_wavelist, fe_params, fe_dir)
+            wav_to_logmel(test_wavelist, config, fe_dir)
 
     elif feature_name == 'mfcc':
         pass
@@ -141,14 +144,32 @@ def main():
         if config['pre-processing']['data-selection']['name'] == 'NOISY_BEST50S':
             # get single-label of noisy data
             # https://www.kaggle.com/daisukelab/creating-fat2019-preprocessed-data
+            """
             noisy_single_df = train.query('noisy_flg == 1 & n_labels == 1')
             noisy_labels = noisy_single_df.labels.unique().tolist()
-            idxes_best50s = np.array([random.choices(noisy_single_df[(noisy_single_df.labels == l)].index, k=50) for l in labels]).ravel()
+            idxes_best50s = np.concatenate([
+                random.sample(noisy_single_df[(noisy_single_df.labels == l)].index.tolist(), k=50)
+                if len(noisy_single_df[(noisy_single_df.labels == l)]) > 50
+                else noisy_single_df[(noisy_single_df.labels == l)].index.tolist() for l in labels
+            ]).ravel()
+            idxes_best50s = np.unique(idxes_best50s)
             idxes_curated = train.query('noisy_flg == 0').index.values
             use_index = np.concatenate((idxes_curated, idxes_best50s))
+            np.save('./data/interim/use_index_NOISY_BEST50S.npy', use_index)
+            """
+            use_index = np.load('./data/interim/use_index_NOISY_BEST50S.npy')
         else:
             # use all data
             use_index = train.index
+
+    # =======================================
+    # tmp
+    train_org = train.copy()
+    remain_idx = np.array([idx for idx in train_org.index if idx not in use_index])
+    remain_train = train_org.iloc[remain_idx].reset_index(drop=True)
+    remain_y_train = y_train[remain_idx]
+    logger.info(f"add train: {len(remain_idx)}")
+    # =======================================
 
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
@@ -176,6 +197,13 @@ def main():
         y_trn = y_train[trn_idx]
         val_set = train.iloc[val_idx].reset_index(drop=True)
         y_val = y_train[val_idx]
+
+        # =======================================
+        # tmp
+        trn_set = pd.concat([trn_set, remain_train], axis=0, sort=False, ignore_index=True)
+        y_trn = np.concatenate((y_trn, remain_y_train))
+        # =======================================
+
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
 
         # define train-loader and valid-loader
@@ -188,10 +216,12 @@ def main():
             ])
             trnSet = FAT_TrainSet_logmel(
                 config=config, dataframe=trn_set, labels=y_trn,
+                offline_aug=config['offline-augment']['enabled'],
                 specAug=config['model']['specAug']['enabled'], transform=train_transform
             )
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
+                offline_aug=False,
                 specAug=False, transform=val_transform
             )
 
@@ -244,6 +274,7 @@ def main():
             ])
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
+                offline_aug=False,
                 specAug=False, transform=val_transform
             )
         val_loader = DataLoader(
@@ -256,8 +287,6 @@ def main():
         if config['model']['params']['cuda']:
             model.load_state_dict(torch.load(model_output_dir / f'weight_best_fold{i_fold+1}.pt'))
             model.cuda()
-        else:
-            model.load_state_dict(torch.load(model_output_dir / f'weight_best_fold{i_fold+1}.pt', map_location='cpu'))
         model.eval()
 
         with torch.no_grad():
@@ -269,6 +298,7 @@ def main():
                 # preds_list.append(output.cpu().numpy())
                 target_list.append(y_batch.cpu().numpy())
 
+    # summary
     all_preds = np.concatenate(preds_list)
     all_target = np.concatenate(target_list)
     score, weight = calculate_per_class_lwlrap(all_target, all_preds)
@@ -277,6 +307,8 @@ def main():
     config.update({'total': {
         'best_lwlrap': lwlrap
     }})
+
+    all_preds
 
     # =========================================
     # === Predict

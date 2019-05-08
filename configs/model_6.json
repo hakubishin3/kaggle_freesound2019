@@ -1,0 +1,100 @@
+{
+    "features": {
+        "name" : "logmel",
+        "params": {
+            "sampling_rate": 44100,
+            "duration": 2,
+            "factor__hop_length": 347,
+            "n_mels": 128,
+            "factor__n_fft": 20,
+            "fmin": 20,
+            "factor__fmax": 2
+        }
+    },
+    "offline-augment": {
+        "enabled": false,
+        "n_aug": 12,
+        "time_stretch": {
+            "enabled": true,
+            "stretch_rates": [0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25]
+        },
+        "pitch_shift": {
+            "enabled": true,
+            "n_steps": [-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0]
+        },
+        "add-noise": {
+            "enabled": false
+        }
+    },
+    "cv": {
+        "method": "StratifiedKFold",
+        "n_splits": 4,
+        "random_state": 71,
+        "shuffle": true
+    },
+    "model": {
+        "name": "simple_2d_cnn_logmel",
+        "params": {
+            "input_length": 128,
+            "shuffle": true,
+            "num_workers": 7,
+            "cuda": true,
+            "batch_size": 64,
+            "n_epochs": 253,
+            "print_epoch": 1,
+            "early_stopping_patience": 50
+        },
+        "loss": {
+            "name": "BCEWithLogitsLoss"
+        },
+        "optimizer": {
+            "name": "Adam",
+            "lr": 0.003,
+            "amsgrad": false
+        },
+        "scheduler": {
+            "name": "CosineAnnealingLR",
+            "T_max": 10,
+            "eta_min": 1e-5
+        },
+        "mixup": {
+            "enabled": true,
+            "alpha": 2
+        },
+        "specAug": {
+            "enabled": false,
+            "F": 27,
+            "F_num_masks": 2,
+            "T": 27,
+            "T_num_masks": 2,
+            "replace_with_zero": false
+        },
+        "predict": {
+            "test_batch_size": 256,
+            "num_workers": 6,
+            "tta": 20
+        }
+    },
+    "dataset": {
+        "input_directory": "data/input/",
+        "intermediate_directory": "data/interim/",
+        "output_directory": "data/output/",
+        "files": {
+            "meta": {
+                "train_curated": "train_curated.csv",
+                "train_noisy": "train_noisy.csv",
+                "test": "sample_submission.csv"
+            },
+            "wav": {
+                "train_curated": "train_curated/",
+                "train_noisy": "train_noisy/",
+                "test": "test/"
+            }
+        }
+    },
+    "pre-processing": {
+        "data-selection": {
+            "name": "NOISY_BEST50S"
+        }
+    }
+}

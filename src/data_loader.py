@@ -105,19 +105,29 @@ def time_mask(data, T=30, num_masks=1, replace_with_zero=False):
 
 
 class FAT_TrainSet_logmel(Dataset):
-    def __init__(self, config, dataframe, labels, specAug, transform=None):
+    def __init__(self, config, dataframe, labels, offline_aug, specAug, transform=None):
         self.config = config
         self.dataframe = dataframe
         self.labels = labels
         self.transform = transform
+        self.offline_aug = offline_aug
         self.specAug = specAug
 
     def __len__(self):
         return len(self.dataframe)
 
     def __getitem__(self, idx):
+        # get augmentation filename if offline_aug is True
+        if self.offline_aug:
+            n_aug = self.config['offline-augment']['n_aug']
+            i_aug = np.random.randint(n_aug)
+            suffix = f'_aug{i_aug+1}'
+        else:
+            suffix = ''
+
+        # get filename
         fe_dir = pathlib.Path(self.config['fe_dir'])
-        filename = os.path.splitext(self.dataframe["fname"][idx])[0] + '.pkl'
+        filename = os.path.splitext(self.dataframe["fname"][idx])[0] + suffix + '.pkl'
         file_path = fe_dir / filename
 
         # Read and Resample the audio
@@ -126,6 +136,7 @@ class FAT_TrainSet_logmel(Dataset):
 
         # specAugment
         # ※ normalizeの後に実行すること
+        """
         if self.specAug:
             F = self.config['model']['specAug']['F']
             F_num_masks = self.config['model']['specAug']['F_num_masks']
@@ -136,6 +147,7 @@ class FAT_TrainSet_logmel(Dataset):
                 freq_mask(data, F=F, num_masks=F_num_masks, replace_with_zero=replace_with_zero),
                 T=T, num_masks=T_num_masks, replace_with_zero=replace_with_zero
             )
+        """
 
         if self.transform is not None:
             data = self.transform(data)
@@ -207,10 +219,12 @@ class FAT_TestSet_logmel(Dataset):
 
         # Random offset / Padding
         if logmel.shape[2] > input_length:   # logmel.shape = (3, n_mel, xx)
+            # Random offset
             max_offset = logmel.shape[2] - input_length
             offset = np.random.randint(max_offset)
             data = logmel[:, :, offset:(input_length + offset)]
         else:
+            # Padding
             if input_length > logmel.shape[2]:
                 max_offset = input_length - logmel.shape[2]
                 offset = np.random.randint(max_offset)
