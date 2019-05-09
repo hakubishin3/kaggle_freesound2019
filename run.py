@@ -144,19 +144,13 @@ def main():
         if config['pre-processing']['data-selection']['name'] == 'NOISY_BEST50S':
             # get single-label of noisy data
             # https://www.kaggle.com/daisukelab/creating-fat2019-preprocessed-data
-            """
             noisy_single_df = train.query('noisy_flg == 1 & n_labels == 1')
             noisy_labels = noisy_single_df.labels.unique().tolist()
-            idxes_best50s = np.concatenate([
-                random.sample(noisy_single_df[(noisy_single_df.labels == l)].index.tolist(), k=50)
-                if len(noisy_single_df[(noisy_single_df.labels == l)]) > 50
-                else noisy_single_df[(noisy_single_df.labels == l)].index.tolist() for l in labels
-            ]).ravel()
+            idxes_best50s = np.array([random.choices(noisy_single_df[(noisy_single_df.labels == l)].index, k=50) for l in labels]).ravel()
             idxes_best50s = np.unique(idxes_best50s)
             idxes_curated = train.query('noisy_flg == 0').index.values
             use_index = np.concatenate((idxes_curated, idxes_best50s))
             np.save('./data/interim/use_index_NOISY_BEST50S.npy', use_index)
-            """
             use_index = np.load('./data/interim/use_index_NOISY_BEST50S.npy')
 
         elif config['pre-processing']['data-selection']['name'] == 'NOISY_SINGL_ALL':
