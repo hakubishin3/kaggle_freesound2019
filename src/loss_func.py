@@ -1,26 +1,29 @@
 import types
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-# Source: https://www.kaggle.com/c/human-protein-atlas-image-classification/discussion/78109
+# Source: https://gist.github.com/AdrienLE/bf31dfe94569319f6e47b2de8df13416#file-focal_dice_1-py
 class FocalLoss_(nn.Module):
-    def __init__(self, gamma=2):
+    def __init__(self, gamma):
         super().__init__()
         self.gamma = gamma
+        
+    def forward(self, input, target):
+        # Inspired by the implementation of binary_cross_entropy_with_logits
+        if not (target.size() == input.size()):
+            raise ValueError("Target size ({}) must be the same as input size ({})".format(target.size(), input.size()))
 
-    def forward(self, logit, target):
-        target = target.float()
-        max_val = (-logit).clamp(min=0)
-        loss = logit - logit * target + max_val + \
-               ((-max_val).exp() + (-logit - max_val).exp()).log()
+        max_val = (-input).clamp(min=0)
+        loss = input - input * target + max_val + ((-max_val).exp() + (-input - max_val).exp()).log()
 
-        invprobs = F.logsigmoid(-logit * (target * 2.0 - 1.0))
+        # This formula gives us the log sigmoid of 1-p if y is 0 and of p if y is 1
+        invprobs = F.logsigmoid(-input * (target * 2 - 1))
         loss = (invprobs * self.gamma).exp() * loss
-        if len(loss.size())==2:
-            loss = loss.sum(dim=1)
+
         return loss.mean()
 
 

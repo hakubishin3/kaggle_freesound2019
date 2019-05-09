@@ -1,0 +1,158 @@
+{
+    "features": {
+        "name": "logmel",
+        "params": {
+            "sampling_rate": 44100,
+            "duration": 2,
+            "factor__hop_length": 347,
+            "n_mels": 128,
+            "factor__n_fft": 20,
+            "fmin": 20,
+            "factor__fmax": 2
+        }
+    },
+    "offline-augment": {
+        "enabled": false,
+        "n_aug": 12,
+        "time_stretch": {
+            "enabled": true,
+            "stretch_rates": [
+                0.85,
+                0.9,
+                0.95,
+                1.0,
+                1.05,
+                1.1,
+                1.15,
+                1.2,
+                1.25
+            ]
+        },
+        "pitch_shift": {
+            "enabled": true,
+            "n_steps": [
+                -2.0,
+                -1.5,
+                -1.0,
+                -0.5,
+                0.0,
+                0.5,
+                1.0,
+                1.5,
+                2.0
+            ]
+        },
+        "add-noise": {
+            "enabled": false
+        }
+    },
+    "cv": {
+        "method": "StratifiedKFold",
+        "n_splits": 4,
+        "random_state": 71,
+        "shuffle": true
+    },
+    "model": {
+        "name": "simple_2d_cnn_logmel",
+        "params": {
+            "input_length": 128,
+            "shuffle": true,
+            "num_workers": 6,
+            "cuda": true,
+            "batch_size": 64,
+            "n_epochs": 300,
+            "print_epoch": 1,
+            "early_stopping_patience": 50
+        },
+        "loss": {
+            "name": "BCEWithLogitsLoss"
+        },
+        "optimizer": {
+            "name": "Adam",
+            "lr": 0.003,
+            "amsgrad": false
+        },
+        "scheduler": {
+            "name": "CosineAnnealingLR",
+            "T_max": 10,
+            "eta_min": 1e-05
+        },
+        "mixup": {
+            "enabled": true,
+            "alpha": 2
+        },
+        "specAug": {
+            "enabled": false,
+            "F": 27,
+            "F_num_masks": 2,
+            "T": 27,
+            "T_num_masks": 2,
+            "replace_with_zero": false
+        },
+        "predict": {
+            "test_batch_size": 256,
+            "num_workers": 6,
+            "tta": 20
+        }
+    },
+    "dataset": {
+        "input_directory": "data/input/",
+        "intermediate_directory": "data/interim/",
+        "output_directory": "data/output/",
+        "files": {
+            "meta": {
+                "train_curated": "train_curated.csv",
+                "train_noisy": "train_noisy.csv",
+                "test": "sample_submission.csv"
+            },
+            "wav": {
+                "train_curated": "train_curated/",
+                "train_noisy": "train_noisy/",
+                "test": "test/"
+            }
+        }
+    },
+    "pre-processing": {
+        "data-selection": {
+            "name": "NOISY_BEST50S"
+        }
+    },
+    "args": {
+        "config": "configs/model_7.json",
+        "debug_mode": false,
+        "force": false
+    },
+    "model_output_dir": "data/output/model_7",
+    "fe_dir": "data/interim/logmel+delta_nmels128_duration2_nfft2560",
+    "train_result_fold1": {
+        "best_epoch": 251,
+        "best_lwlrap": 0.5826590208069264,
+        "best_loss": 0.0405252056920694,
+        "best_lwlrap_train": 0.49781734173422865,
+        "best_loss_train": 0.04665587920518152
+    },
+    "train_result_fold2": {
+        "best_epoch": 231,
+        "best_lwlrap": 0.631839112427756,
+        "best_loss": 0.03804538377693722,
+        "best_lwlrap_train": 0.5344177266719005,
+        "best_loss_train": 0.043608688882419026
+    },
+    "train_result_fold3": {
+        "best_epoch": 211,
+        "best_lwlrap": 0.645717405932642,
+        "best_loss": 0.0365860464317458,
+        "best_lwlrap_train": 0.5305727819770596,
+        "best_loss_train": 0.04376424536818548
+    },
+    "train_result_fold4": {
+        "best_epoch": 211,
+        "best_lwlrap": 0.6529783724707761,
+        "best_loss": 0.036437406284468524,
+        "best_lwlrap_train": 0.5101321133432674,
+        "best_loss_train": 0.045284836254311046
+    },
+    "total": {
+        "best_lwlrap": 0.6193717544503511
+    }
+}
