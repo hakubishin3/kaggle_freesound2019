@@ -163,6 +163,11 @@ def main():
             # use all data
             use_index = train.index
 
+        elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
+            # use all data
+            idxes_curated = train.query('noisy_flg == 0').index.values
+            use_index = idxes_curated
+
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
     logger.info(f'n_use_train_data: {len(use_index)}')
