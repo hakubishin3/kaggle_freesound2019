@@ -40,9 +40,9 @@
             "num_workers": 6,
             "cuda": true,
             "batch_size": 64,
-            "n_epochs": 300,
+            "n_epochs": 131,
             "print_epoch": 1,
-            "early_stopping_patience": 50
+            "early_stopping_patience": 30
         },
         "loss": {
             "name": "BCEWithLogitsLoss"

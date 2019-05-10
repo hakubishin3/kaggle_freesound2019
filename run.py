@@ -163,15 +163,6 @@ def main():
             # use all data
             use_index = train.index
 
-    # ==============================================================
-    # tmp
-    train_org = train.copy()
-    idxes_remain = np.array([idx for idx in train_org.index if idx not in use_index])
-    remain_train = train_org.iloc[idxes_remain].reset_index(drop=True)
-    remain_y_train = y_train[idxes_remain]
-    logger.info(f'add train_data: {len(remain_y_train)}')
-    # ==============================================================
-
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
     logger.info(f'n_use_train_data: {len(use_index)}')
@@ -198,12 +189,6 @@ def main():
         y_trn = y_train[trn_idx]
         val_set = train.iloc[val_idx].reset_index(drop=True)
         y_val = y_train[val_idx]
-
-        # ==============================================================
-        # tmp
-        trn_set = pd.concat([trn_set, remain_train], axis=0, ignore_index=True, sort=False)
-        y_trn = np.concatenate((y_trn, remain_y_train))
-        # ==============================================================
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
 
@@ -240,6 +225,10 @@ def main():
         # load model
         model = MODEL_map[config['model']['name']]()
         if config['model']['params']['cuda']:
+            # =========================================================================
+            # tmp
+            model.load_state_dict(torch.load(f'./data/output/model_8/weight_best_fold{i_fold+1}.pt'))
+            # =========================================================================
             model.cuda()
 
         # setting train parameters

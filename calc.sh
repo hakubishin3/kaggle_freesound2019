@@ -1,5 +1,5 @@
-python run.py --config configs/model_8.json
+python run.py --config configs/model_9.json
 
-sleep 60s
-gcloud compute instances stop instance-gpu --zone asia-east1-c
+#sleep 60s
+#gcloud compute instances stop instance-gpu --zone asia-east1-c
 
