@@ -125,34 +125,34 @@
     "model_output_dir": "data/output/model_8",
     "fe_dir": "data/interim/logmel+delta_nmels128_duration2_nfft2560",
     "train_result_fold1": {
-        "best_epoch": 210,
-        "best_lwlrap": 0.6104898066506079,
-        "best_loss": 0.0396559733678313,
-        "best_lwlrap_train": 0.5444900201146147,
-        "best_loss_train": 0.043288557818441695
+        "best_epoch": 211,
+        "best_lwlrap": 0.6616654676000154,
+        "best_loss": 0.038049242976639,
+        "best_lwlrap_train": 0.4432905522878591,
+        "best_loss_train": 0.05459151375624866
     },
     "train_result_fold2": {
-        "best_epoch": 130,
-        "best_lwlrap": 0.6336405172863528,
-        "best_loss": 0.03814269898130613,
-        "best_lwlrap_train": 0.4627373343891912,
-        "best_loss_train": 0.04868872979223125
+        "best_epoch": 231,
+        "best_lwlrap": 0.6639426072278394,
+        "best_loss": 0.035803015136884324,
+        "best_lwlrap_train": 0.44050626628980005,
+        "best_loss_train": 0.05461176451801264
     },
     "train_result_fold3": {
-        "best_epoch": 211,
-        "best_lwlrap": 0.6453043202169904,
-        "best_loss": 0.036675244456890854,
-        "best_lwlrap_train": 0.5343165067502067,
-        "best_loss_train": 0.04399516008794308
+        "best_epoch": 171,
+        "best_lwlrap": 0.6695917374136795,
+        "best_loss": 0.035413809280310356,
+        "best_lwlrap_train": 0.41329932520511165,
+        "best_loss_train": 0.0566551373791662
     },
     "train_result_fold4": {
         "best_epoch": 231,
-        "best_lwlrap": 0.6562739958316208,
-        "best_loss": 0.035880488653977714,
-        "best_lwlrap_train": 0.5410761475709067,
-        "best_loss_train": 0.04348232939839365
+        "best_lwlrap": 0.6971382534278429,
+        "best_loss": 0.033778694644570346,
+        "best_lwlrap_train": 0.43780882720542236,
+        "best_loss_train": 0.054496527316662755
     },
     "total": {
-        "best_lwlrap": 0.6325006855165118
+        "best_lwlrap": 0.6679823496077155
     }
 }
