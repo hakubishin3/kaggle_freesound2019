@@ -159,7 +159,8 @@ def main():
         elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
             # use all data
             silent_wav_list = get_silent_wav_list()
-            idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
+            idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list and n_labels == 1').index.values
+            # idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
     train = train.iloc[use_index].reset_index(drop=True)
