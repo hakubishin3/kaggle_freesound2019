@@ -11,7 +11,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap
-from src.data_loader import get_meta_data, ToTensor, FAT_TrainSet_logmel, FAT_TestSet_logmel
+from src.data_loader import get_meta_data, ToTensor, FAT_TrainSet_logmel, FAT_TestSet_logmel, get_silent_wav_list
 from src.data_transform import wav_to_logmel
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
 from src.loss_func import BCEWithLogitsLoss, FocalLoss
@@ -152,24 +152,19 @@ def main():
             np.save('./data/interim/use_index_NOISY_BEST50S.npy', use_index)
             use_index = np.load('./data/interim/use_index_NOISY_BEST50S.npy')
 
-        elif config['pre-processing']['data-selection']['name'] == 'NOISY_SINGL_ALL':
-            # use all data
-            noisy_single_df = train.query('noisy_flg == 1 & n_labels == 1')
-            idxes_noisy = noisy_single_df.index
-            idxes_curated = train.query('noisy_flg == 0').index.values
-            use_index = np.concatenate((idxes_curated, idxes_noisy))
-
         elif config['pre-processing']['data-selection']['name'] == 'ALL':
             # use all data
             use_index = train.index
 
         elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
             # use all data
-            idxes_curated = train.query('noisy_flg == 0').index.values
+            silent_wav_list = get_silent_wav_list()
+            idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
+
     logger.info(f'n_use_train_data: {len(use_index)}')
 
     # set fold
@@ -229,12 +224,7 @@ def main():
 
         # load model
         model = MODEL_map[config['model']['name']]()
-        if config['model']['params']['cuda']:
-            # =========================================================================
-            # tmp
-            model.load_state_dict(torch.load(f'./data/output/model_8/weight_best_fold{i_fold+1}.pt'))
-            # =========================================================================
-            model.cuda()
+        model.cuda()
 
         # setting train parameters
         criterion = LOSS_map[config['model']['loss']['name']](config).cuda()
@@ -252,7 +242,7 @@ def main():
         logger.info(f'--------------Time on fold {i_fold+1}: {time_on_fold}--------------\n')
 
     # =========================================
-    # === Tmp
+    # === Check Train Result
     # =========================================
 
     # check total score
@@ -290,7 +280,6 @@ def main():
                     x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
                 output = model(x_batch)
                 preds_list.append(torch.sigmoid(output).cpu().numpy())
-                # preds_list.append(output.cpu().numpy())
                 target_list.append(y_batch.cpu().numpy())
 
     # summary

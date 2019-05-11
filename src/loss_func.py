@@ -11,7 +11,7 @@ class FocalLoss_(nn.Module):
     def __init__(self, gamma):
         super().__init__()
         self.gamma = gamma
-        
+
     def forward(self, input, target):
         # Inspired by the implementation of binary_cross_entropy_with_logits
         if not (target.size() == input.size()):
@@ -28,7 +28,6 @@ class FocalLoss_(nn.Module):
 
 
 def BCEWithLogitsLoss(config):
-    # return nn.BCELoss()
     return nn.BCEWithLogitsLoss()
 
 

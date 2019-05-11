@@ -63,56 +63,6 @@ def train_on_fold(model, trn_loader, val_loader,
     })
 
 
-def freq_mask(spec, F=30, num_masks=1, replace_with_zero=False):
-    cloned = spec.clone()   # data.shape = (3, n_mel, xx)
-    num_mel_channels = cloned.shape[1]
-
-    for i in range(0, num_masks):
-        f = random.randrange(0, F)
-        f_zero = random.randrange(0, num_mel_channels - f)
-
-        # avoids randrange error if values are equal and range is empty
-        if (f_zero == f_zero + f):
-            return cloned
-
-        mask_end = random.randrange(f_zero, f_zero + f)
-        if (replace_with_zero):
-            cloned[0][f_zero:mask_end] = 0
-            cloned[1][f_zero:mask_end] = 0
-            cloned[2][f_zero:mask_end] = 0
-        else:
-            cloned[0][f_zero:mask_end] = spec[0].mean()
-            cloned[1][f_zero:mask_end] = spec[1].mean()
-            cloned[2][f_zero:mask_end] = spec[2].mean()
-
-    return cloned
-
-
-def time_mask(spec, T=40, num_masks=1, replace_with_zero=False):
-    cloned = spec.clone()   # data.shape = (3, n_mel, xx)
-    len_spectro = cloned.shape[2]
-
-    for i in range(0, num_masks):
-        t = random.randrange(0, T)
-        t_zero = random.randrange(0, len_spectro - t)
-
-        # avoids randrange error if values are equal and range is empty
-        if (t_zero == t_zero + t):
-            return cloned
-
-        mask_end = random.randrange(t_zero, t_zero + t)
-        if (replace_with_zero):
-            cloned[0][:, t_zero:mask_end] = 0
-            cloned[1][:, t_zero:mask_end] = 0
-            cloned[2][:, t_zero:mask_end] = 0
-        else:
-            cloned[0][:, t_zero:mask_end] = spec[0].mean()
-            cloned[1][:, t_zero:mask_end] = spec[1].mean()
-            cloned[2][:, t_zero:mask_end] = spec[2].mean()
-
-    return cloned
-
-
 def train_one_epoch(model, trn_loader, criterion, optimizer, config):
     losses = 0.
     preds_list = []
@@ -124,19 +74,6 @@ def train_one_epoch(model, trn_loader, criterion, optimizer, config):
     for i, (x_batch, y_batch) in enumerate(trn_loader):
         if config['model']['mixup']['enabled']:
             x_batch, y_batch = mixup(x_batch, y_batch, alpha=config['model']['mixup']['alpha'])
-
-        # mixupの後に実行すること
-        if config['model']['specAug']['enabled']:
-            F = config['model']['specAug']['F']
-            F_num_masks = config['model']['specAug']['F_num_masks']
-            T = config['model']['specAug']['T']
-            T_num_masks = config['model']['specAug']['T_num_masks']
-            replace_with_zero = config['model']['specAug']['replace_with_zero']
-            for i_data in range(x_batch.size()[0]):
-                x_batch[i_data] = time_mask(
-                    freq_mask(x_batch[i_data], F=F, num_masks=F_num_masks, replace_with_zero=replace_with_zero),
-                    T=T, num_masks=T_num_masks, replace_with_zero=replace_with_zero
-                )
 
         if config['model']['params']['cuda']:
             x_batch, y_batch = x_batch.cuda(), y_batch.cuda()
@@ -150,7 +87,6 @@ def train_one_epoch(model, trn_loader, criterion, optimizer, config):
         losses += loss.item() / len(trn_loader)
 
         preds_list.append(torch.sigmoid(output).cpu().detach().numpy())
-        # preds_list.append(output.cpu().detach().numpy())
         target_list.append(y_batch.cpu().numpy())
 
     all_preds = np.concatenate(preds_list)
@@ -179,7 +115,6 @@ def val_on_fold(model, val_loader, criterion, config):
             losses += loss.item() / len(val_loader)
 
             preds_list.append(torch.sigmoid(output).cpu().numpy())
-            # preds_list.append(output.cpu().numpy())
             target_list.append(y_batch.cpu().numpy())
 
     all_preds = np.concatenate(preds_list)
@@ -201,7 +136,6 @@ def predict_model(model, test_loader, n_classes):
             x_batch = x_batch.cuda()
             output = model(x_batch)
             preds_list.append(torch.sigmoid(output).cpu().numpy())
-            # preds_list.append(output.cpu().numpy())
             fname_list.extend(fnames)
 
     test_preds = pd.DataFrame(

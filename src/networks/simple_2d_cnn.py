@@ -71,5 +71,4 @@ class Classifier(nn.Module):
         x = torch.mean(x, dim=3)
         x, _ = torch.max(x, dim=2)
         x = self.fc(x)
-        # x = torch.sigmoid(x)
         return x
