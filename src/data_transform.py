@@ -71,8 +71,8 @@ def tsfm_logmel(wavefile, config, fe_dir, stretch_rate=None, n_step=None, suffix
     samples = sampling_rate * duration
 
     # get wav-data
-    # min_data_length = samples
-    min_data_length = int(9 * hop_length)
+    min_data_length = samples
+    # min_data_length = int(9 * hop_length)
     data = read_audio(wavefile, sampling_rate, min_data_length)
 
     # augmentation

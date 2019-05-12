@@ -1,4 +1,14 @@
+import adabound
 from torch.optim import Adam, SGD
+
+
+def opt_AdaBound(model_params, config):
+    optimizer = adabound.AdaBound(
+        model_params,
+        lr=config['model']['optimizer']['lr'],
+        final_lr=config['model']['optimizer']['final_lr']
+    )
+    return optimizer
 
 
 def opt_Adam(model_params, config):

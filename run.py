@@ -13,14 +13,20 @@ from torch.utils.data import DataLoader
 from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap
 from src.data_loader import get_meta_data, ToTensor, FAT_TrainSet_logmel, FAT_TestSet_logmel, get_silent_wav_list
 from src.data_transform import wav_to_logmel
+
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
+from src.networks.densenet import densenet121_logmel
+from src.networks.resnet import resnet50_logmel
+
 from src.loss_func import BCEWithLogitsLoss, FocalLoss
-from src.optimizers import opt_Adam, opt_SGD
+from src.optimizers import opt_Adam, opt_SGD, opt_AdaBound
 from src.schedulers import sche_CosineAnnealingLR
 from src.train import train_on_fold, predict_model
 
 MODEL_map = {
-    'simple_2d_cnn_logmel': simple_2d_cnn_logmel
+    'simple_2d_cnn_logmel': simple_2d_cnn_logmel,
+    'densenet121_logmel': densenet121_logmel,
+    'resnet50_logmel': resnet50_logmel
 }
 
 LOSS_map = {
@@ -30,7 +36,8 @@ LOSS_map = {
 
 OPTIMIZER_map = {
     'Adam': opt_Adam,
-    'SGD': opt_SGD
+    'SGD': opt_SGD,
+    'AdaBound': opt_AdaBound
 }
 
 SCHEDULER_map = {
@@ -159,8 +166,7 @@ def main():
         elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
             # use all data
             silent_wav_list = get_silent_wav_list()
-            idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list and n_labels == 1').index.values
-            # idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
+            idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
     train = train.iloc[use_index].reset_index(drop=True)
