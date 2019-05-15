@@ -6,7 +6,8 @@ import random
 import torch
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
@@ -15,23 +16,21 @@ from src.data_loader import get_meta_data, ToTensor, FAT_TrainSet_logmel, FAT_Te
 from src.data_transform import wav_to_logmel
 
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
-from src.networks.densenet import densenet121_logmel
-from src.networks.resnet import resnet50_logmel
-
-from src.loss_func import BCEWithLogitsLoss, FocalLoss
+from src.loss_func import BCEWithLogitsLoss, FocalLoss, MAE, MSE, Lq
 from src.optimizers import opt_Adam, opt_SGD, opt_AdaBound
 from src.schedulers import sche_CosineAnnealingLR
 from src.train import train_on_fold, predict_model
 
 MODEL_map = {
-    'simple_2d_cnn_logmel': simple_2d_cnn_logmel,
-    'densenet121_logmel': densenet121_logmel,
-    'resnet50_logmel': resnet50_logmel
+    'simple_2d_cnn_logmel': simple_2d_cnn_logmel
 }
 
 LOSS_map = {
     'BCEWithLogitsLoss': BCEWithLogitsLoss,
-    'FocalLoss': FocalLoss
+    'FocalLoss': FocalLoss,
+    'MAE': MAE,
+    'MSE': MSE,
+    'Lq': Lq
 }
 
 OPTIMIZER_map = {
@@ -138,6 +137,8 @@ def main():
 
     elif feature_name == 'mfcc':
         pass
+    import pdb; pdb.set_trace()
+
 
     # =========================================
     # === Train Model
@@ -169,6 +170,8 @@ def main():
             idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
+    train_org = train.copy()
+    y_train_org = y_train.copy()
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
 
@@ -181,14 +184,21 @@ def main():
             shuffle=config['cv']['shuffle'],
             random_state=config['cv']['random_state']
         )
-
-    # create labels for splits
-    label_idx = {label: i for i, label in enumerate(labels)}
-    train['first_label'] = train['labels'].apply(lambda x: x.split(',')[0])
-    train["label_idx"] = train['first_label'].apply(lambda x: label_idx[x])
+    elif config['cv']['method'] == 'MultilabelStratifiedKFold':
+        skf = MultilabelStratifiedKFold(
+            n_splits=config['cv']['n_splits'],
+            shuffle=config['cv']['shuffle'],
+            random_state=config['cv']['random_state']
+        )
+    elif config['cv']['method'] == 'KFold':
+        skf = KFold(
+            n_splits=config['cv']['n_splits'],
+            shuffle=config['cv']['shuffle'],
+            random_state=config['cv']['random_state']
+        )
 
     # train
-    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(train, train['label_idx'])):
+    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(train, y_train)):
         end = time.time()
 
         # split dataset
@@ -244,7 +254,6 @@ def main():
             model, trn_loader, val_loader,
             criterion, optimizer, scheduler, config, i_fold, logger
         )
-
         time_on_fold = time.strftime('%Hh:%Mm:%Ss', time.gmtime(time.time() - end))
         logger.info(f'--------------Time on fold {i_fold+1}: {time_on_fold}--------------\n')
 
@@ -255,7 +264,7 @@ def main():
     # check total score
     preds_list = []
     target_list = []
-    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(train, train['label_idx'])):
+    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(train, y_train)):
         val_set = train.iloc[val_idx].reset_index(drop=True)
         y_val = y_train[val_idx]
 

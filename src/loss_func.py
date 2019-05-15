@@ -33,3 +33,24 @@ def BCEWithLogitsLoss(config):
 
 def FocalLoss(config):
     return FocalLoss_(gamma=config['model']['loss']['gamma'])
+
+
+def MAE(config):
+    return nn.L1Loss()
+
+
+def MSE(config):
+    return nn.MSELoss()
+
+
+class Lq_(torch.nn.Module):
+    def __init__(self, q=0.3):
+        self.q = q
+        super(Lq_, self).__init__()
+
+    def forward(self, input, target):
+        return torch.mean((1 - ((input * target).sum(1, keepdim=True))**self.q) / self.q)
+
+
+def Lq(config):
+    return Lq_()
