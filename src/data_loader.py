@@ -62,42 +62,20 @@ def get_meta_data(config):
     return train, test, y_train, labels
 
 
-class ToTensor(object):
-    """
-    convert ndarrays in sample to Tensors.
-    return:
-        feat(torch.FloatTensor)
-        label(torch.LongTensor of size batch_size x 1)
-    """
-    def __call__(self, data):
-        data = torch.from_numpy(data).type(torch.FloatTensor)
-        return data
-
-
 class FAT_TrainSet_logmel(Dataset):
-    def __init__(self, config, dataframe, labels, offline_aug, specAug, transform=None):
+    def __init__(self, config, dataframe, labels, transform=None):
         self.config = config
         self.dataframe = dataframe
         self.labels = labels
         self.transform = transform
-        self.offline_aug = offline_aug
-        self.specAug = specAug
 
     def __len__(self):
         return len(self.dataframe)
 
     def __getitem__(self, idx):
-        # get augmentation filename if offline_aug is True
-        if self.offline_aug:
-            n_aug = self.config['offline-augment']['n_aug']
-            i_aug = np.random.randint(n_aug)
-            suffix = f'_aug{i_aug+1}'
-        else:
-            suffix = ''
-
         # get filename
         fe_dir = pathlib.Path(self.config['fe_dir'])
-        filename = os.path.splitext(self.dataframe["fname"][idx])[0] + suffix + '.pkl'
+        filename = os.path.splitext(self.dataframe["fname"][idx])[0] + '.pkl'
         file_path = fe_dir / filename
 
         # Read and Resample the audio
@@ -107,6 +85,9 @@ class FAT_TrainSet_logmel(Dataset):
         if self.transform is not None:
             data = self.transform(data)
 
+        # standarize
+        data = data.div_(255)
+
         return data, label
 
     def _random_selection(self, file_path):
@@ -115,25 +96,13 @@ class FAT_TrainSet_logmel(Dataset):
         # Read the logmel pkl
         logmel = load_data(file_path)
 
-        # standarize([0, 1])
-        for i_channel in range(logmel.shape[0]):
-            logmel[i_channel, :, :] = standarize(logmel[i_channel, :, :])
+        # random offset and convert to image
+        image = Image.fromarray(logmel, mode='RGB')
+        time_dim, base_dim = image.size
+        crop = random.randint(0, time_dim - base_dim)
+        image = image.crop([crop, 0, crop + base_dim, base_dim])
 
-        # Random offset / Padding
-        if logmel.shape[2] > input_length:   # logmel.shape = (3, n_mel, xx)
-            max_offset = logmel.shape[2] - input_length
-            offset = np.random.randint(max_offset)
-            data = logmel[:, :, offset:(input_length + offset)]
-        else:
-            if input_length > logmel.shape[2]:
-                max_offset = input_length - logmel.shape[2]
-                offset = np.random.randint(max_offset)
-            else:
-                # input_length = logmel.shape[2]
-                offset = 0
-            data = np.pad(logmel, ((0, 0), (0, 0), (offset, input_length - logmel.shape[2] - offset)), "constant")
-
-        return data
+        return image
 
 
 class FAT_TestSet_logmel(Dataset):
@@ -160,6 +129,9 @@ class FAT_TestSet_logmel(Dataset):
         if self.transform is not None:
             data = self.transform(data)
 
+        # standarize
+        data = data.div_(255)
+
         return data, fname
 
     def _random_selection(self, file_path):
@@ -168,24 +140,10 @@ class FAT_TestSet_logmel(Dataset):
         # Read the logmel pkl
         logmel = load_data(file_path)
 
-        # standarize([0, 1])
-        for i_channel in range(logmel.shape[0]):
-            logmel[i_channel, :, :] = standarize(logmel[i_channel, :, :])
+        # random offset and convert to image
+        image = Image.fromarray(logmel, mode='RGB')
+        time_dim, base_dim = image.size
+        crop = random.randint(0, time_dim - base_dim)
+        image = image.crop([crop, 0, crop + base_dim, base_dim])
 
-        # Random offset / Padding
-        if logmel.shape[2] > input_length:   # logmel.shape = (3, n_mel, xx)
-            # Random offset
-            max_offset = logmel.shape[2] - input_length
-            offset = np.random.randint(max_offset)
-            data = logmel[:, :, offset:(input_length + offset)]
-        else:
-            # Padding
-            if input_length > logmel.shape[2]:
-                max_offset = input_length - logmel.shape[2]
-                offset = np.random.randint(max_offset)
-            else:
-                # input_length = logmel.shape[2]
-                offset = 0
-            data = np.pad(logmel, ((0, 0), (0, 0), (offset, input_length - logmel.shape[2] - offset)), "constant")
-
-        return data
+        return image

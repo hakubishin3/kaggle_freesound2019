@@ -12,7 +12,7 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap
-from src.data_loader import get_meta_data, ToTensor, FAT_TrainSet_logmel, FAT_TestSet_logmel, get_silent_wav_list
+from src.data_loader import get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel, get_silent_wav_list
 from src.data_transform import wav_to_logmel
 
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
@@ -137,8 +137,6 @@ def main():
 
     elif feature_name == 'mfcc':
         pass
-    import pdb; pdb.set_trace()
-
 
     # =========================================
     # === Train Model
@@ -170,8 +168,6 @@ def main():
             idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
-    train_org = train.copy()
-    y_train_org = y_train.copy()
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
 
@@ -212,20 +208,19 @@ def main():
         # define train-loader and valid-loader
         if feature_name == 'logmel':
             train_transform = transforms.Compose([
-                ToTensor()
+                transforms.ToTensor()
             ])
             val_transform = transforms.Compose([
-                ToTensor()
+                transforms.ToTensor()
             ])
+
             trnSet = FAT_TrainSet_logmel(
                 config=config, dataframe=trn_set, labels=y_trn,
-                offline_aug=config['offline-augment']['enabled'],
-                specAug=config['model']['specAug']['enabled'], transform=train_transform
+                transform=train_transform
             )
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
-                offline_aug=False,
-                specAug=False, transform=val_transform
+                transform=val_transform
             )
 
         trn_loader = DataLoader(
@@ -234,13 +229,14 @@ def main():
             num_workers=config['model']['params']['num_workers']
         )
         val_loader = DataLoader(
-            valSet, batch_size=config['model']['params']['batch_size'],
+            valSet, batch_size=config['model']['predict']['test_batch_size'],
             shuffle=False,
             num_workers=config['model']['params']['num_workers']
         )
 
         # load model
         model = MODEL_map[config['model']['name']]()
+        model.load_state_dict(torch.load(f'./data/output/model_18/weight_best_fold{i_fold+1}.pt'))
         model.cuda()
 
         # setting train parameters
@@ -271,12 +267,11 @@ def main():
         # define train-loader and valid-loader
         if feature_name == 'logmel':
             val_transform = transforms.Compose([
-                ToTensor()
+                transforms.ToTensor()
             ])
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
-                offline_aug=False,
-                specAug=False, transform=val_transform
+                transform=val_transform
             )
         val_loader = DataLoader(
             valSet, batch_size=config['model']['params']['batch_size'],
@@ -317,7 +312,7 @@ def main():
     test_preds = np.zeros_like(test[labels].values).astype(np.float32)
 
     test_transform = transforms.Compose([
-        ToTensor()
+        transforms.ToTensor()
     ])
     testSet = FAT_TestSet_logmel(
         config=config, fnames=test['fname'], transform=test_transform,

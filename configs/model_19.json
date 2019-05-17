@@ -27,7 +27,7 @@
         }
     },
     "cv": {
-        "method": "KFold",
+        "method": "MultilabelStratifiedKFold",
         "n_splits": 5,
         "random_state": 71,
         "shuffle": true
