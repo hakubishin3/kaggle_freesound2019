@@ -12,7 +12,8 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap
-from src.data_loader import get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel, get_silent_wav_list
+from src.edit_data import get_silent_wav_list
+from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel
 from src.data_transform import wav_to_logmel
 
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
@@ -147,23 +148,10 @@ def main():
         # use only few data
         use_index = train.index[:500]
     else:
-        if config['pre-processing']['data-selection']['name'] == 'NOISY_BEST50S':
-            # get single-label of noisy data
-            # https://www.kaggle.com/daisukelab/creating-fat2019-preprocessed-data
-            noisy_single_df = train.query('noisy_flg == 1 & n_labels == 1')
-            noisy_labels = noisy_single_df.labels.unique().tolist()
-            idxes_best50s = np.array([random.choices(noisy_single_df[(noisy_single_df.labels == l)].index, k=50) for l in labels]).ravel()
-            idxes_curated = train.query('noisy_flg == 0').index.values
-            use_index = np.concatenate((idxes_curated, idxes_best50s))
-            np.save('./data/interim/use_index_NOISY_BEST50S.npy', use_index)
-            use_index = np.load('./data/interim/use_index_NOISY_BEST50S.npy')
-
-        elif config['pre-processing']['data-selection']['name'] == 'ALL':
-            # use all data
+        if config['pre-processing']['data-selection']['name'] == 'ALL':
             use_index = train.index
 
         elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
-            # use all data
             silent_wav_list = get_silent_wav_list()
             idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
@@ -174,13 +162,7 @@ def main():
     logger.info(f'n_use_train_data: {len(use_index)}')
 
     # set fold
-    if config['cv']['method'] == 'StratifiedKFold':
-        skf = StratifiedKFold(
-            n_splits=config['cv']['n_splits'],
-            shuffle=config['cv']['shuffle'],
-            random_state=config['cv']['random_state']
-        )
-    elif config['cv']['method'] == 'MultilabelStratifiedKFold':
+    if config['cv']['method'] == 'MultilabelStratifiedKFold':
         skf = MultilabelStratifiedKFold(
             n_splits=config['cv']['n_splits'],
             shuffle=config['cv']['shuffle'],
@@ -208,10 +190,10 @@ def main():
         # define train-loader and valid-loader
         if feature_name == 'logmel':
             train_transform = transforms.Compose([
-                transforms.ToTensor()
+                ToTensor()
             ])
             val_transform = transforms.Compose([
-                transforms.ToTensor()
+                ToTensor()
             ])
 
             trnSet = FAT_TrainSet_logmel(
@@ -236,7 +218,7 @@ def main():
 
         # load model
         model = MODEL_map[config['model']['name']]()
-        model.load_state_dict(torch.load(f'./data/output/model_18/weight_best_fold{i_fold+1}.pt'))
+        model.load_state_dict(torch.load(f'./data/output/model_20/weight_best_fold{i_fold+1}.pt'))
         model.cuda()
 
         # setting train parameters
@@ -267,7 +249,7 @@ def main():
         # define train-loader and valid-loader
         if feature_name == 'logmel':
             val_transform = transforms.Compose([
-                transforms.ToTensor()
+                ToTensor()
             ])
             valSet = FAT_TrainSet_logmel(
                 config=config, dataframe=val_set, labels=y_val,
@@ -312,7 +294,7 @@ def main():
     test_preds = np.zeros_like(test[labels].values).astype(np.float32)
 
     test_transform = transforms.Compose([
-        transforms.ToTensor()
+        ToTensor()
     ])
     testSet = FAT_TestSet_logmel(
         config=config, fnames=test['fname'], transform=test_transform,
