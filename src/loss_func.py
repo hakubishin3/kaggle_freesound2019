@@ -27,6 +27,17 @@ class FocalLoss_(nn.Module):
         return loss.mean()
 
 
+class cross_entropy(torch.nn.Module):
+    def __init__(self):
+        super(cross_entropy, self).__init__()
+
+    def forward(self, input, target, size_average=True):
+        if size_average:
+            return torch.mean(torch.sum(-target * F.log_softmax(input, dim=1), dim=1))
+        else:
+            return torch.sum(torch.sum(-target * F.log_softmax(input, dim=1), dim=1))
+
+
 def BCEWithLogitsLoss(config):
     return nn.BCEWithLogitsLoss()
 

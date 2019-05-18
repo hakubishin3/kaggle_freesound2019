@@ -29,7 +29,7 @@
     },
     "cv": {
         "method": "MultilabelStratifiedKFold",
-        "n_splits": 5,
+        "n_splits": 4,
         "random_state": 71,
         "shuffle": true
     },
@@ -74,7 +74,7 @@
         "predict": {
             "test_batch_size": 256,
             "num_workers": 8,
-            "tta": 100
+            "tta": 40
         }
     },
     "dataset": {

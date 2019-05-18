@@ -218,7 +218,7 @@ def main():
 
         # load model
         model = MODEL_map[config['model']['name']]()
-        model.load_state_dict(torch.load(f'./data/output/model_20/weight_best_fold{i_fold+1}.pt'))
+        model.load_state_dict(torch.load(f'./data/output/model_8/weight_best_fold{i_fold+1}.pt'))
         model.cuda()
 
         # setting train parameters
@@ -238,7 +238,6 @@ def main():
     # =========================================
     # === Check Train Result
     # =========================================
-
     # check total score
     preds_list = []
     target_list = []
@@ -284,8 +283,6 @@ def main():
     config.update({'total': {
         'best_lwlrap': lwlrap
     }})
-
-    all_preds
 
     # =========================================
     # === Predict

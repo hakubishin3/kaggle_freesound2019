@@ -144,7 +144,6 @@ def train_one_epoch(model, trn_loader, criterion, optimizer, config):
             x_batch, y_batch = x_batch.cuda(), y_batch.cuda()
 
         output = model(x_batch)
-        # loss = criterion(torch.sigmoid(output), y_batch)
         loss = criterion(output, y_batch)
 
         optimizer.zero_grad()
@@ -177,7 +176,6 @@ def val_on_fold(model, val_loader, criterion, config):
                 x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
 
             output = model(x_batch)
-            # loss = criterion(torch.sigmoid(output), y_batch)
             loss = criterion(output, y_batch)
             losses += loss.item() / len(val_loader)
 
