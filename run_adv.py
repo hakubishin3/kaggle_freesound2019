@@ -1,0 +1,299 @@
+import json
+import time
+import pathlib
+import argparse
+import random
+import torch
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold, KFold
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+from torchvision import transforms
+from torch.utils.data import DataLoader
+from sklearn.metrics import roc_auc_score
+
+from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap, _one_sample_positive_class_precisions
+from src.edit_data import get_silent_wav_list
+from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel, FAT_ValSet_logmel
+from src.data_transform import wav_to_logmel
+
+from src.networks.simple_2d_cnn_adv import simple_2d_cnn_logmel
+from src.loss_func import BCEWithLogitsLoss, FocalLoss, MAE, MSE, Lq
+from src.optimizers import opt_Adam, opt_SGD, opt_AdaBound
+from src.schedulers import sche_CosineAnnealingLR
+from src.train_adv import train_on_fold
+
+MODEL_map = {
+    'simple_2d_cnn_logmel': simple_2d_cnn_logmel
+}
+
+LOSS_map = {
+    'BCEWithLogitsLoss': BCEWithLogitsLoss,
+    'FocalLoss': FocalLoss,
+    'MAE': MAE,
+    'MSE': MSE,
+    'Lq': Lq
+}
+
+OPTIMIZER_map = {
+    'Adam': opt_Adam,
+    'SGD': opt_SGD,
+    'AdaBound': opt_AdaBound
+}
+
+SCHEDULER_map = {
+    'CosineAnnealingLR': sche_CosineAnnealingLR
+}
+
+
+def main():
+    # =========================================
+    # === Settings
+    # =========================================
+
+    # get logger
+    logger = get_module_logger(__name__)
+
+    # get argument
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default='./configs/model_adv.json')
+    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--force', action='store_true')
+    args = parser.parse_args()
+    logger.info(f'config: {args.config}')
+    logger.info(f'debug: {args.debug}')
+    logger.info(f'force: {args.force}')
+
+    # get config
+    config = json.load(open(args.config))
+    config.update({
+        'args': {
+            'config': args.config,
+            'debug_mode': args.debug,
+            'force': args.force
+        }
+    })
+
+    # make model-output-dir
+    output_dir = config['dataset']['output_directory']
+    model_no = args.config.split('/')[-1].split('.')[0]
+    model_output_dir = pathlib.Path(output_dir + model_no + '/')
+    if not model_output_dir.exists():
+        model_output_dir.mkdir()
+    logger.info(f'model_output_dir: {str(model_output_dir)}')
+    logger.debug(f'model_output_dir exists: {model_output_dir.exists()}')
+    config.update({
+        'model_output_dir': str(model_output_dir)
+    })
+
+    # fix seed
+    seed_everything(71)
+
+    # =========================================
+    # === Data Processing
+    # =========================================
+
+    # get meta-data
+    train, test, y_train, labels = get_meta_data(config)
+    logger.info(f'n_classes: {len(labels)}')
+
+    # get features
+    feature_name = config['features']['name']
+    logger.info(f'feature_name: {feature_name}')
+
+    input_dir = config['dataset']['input_directory']
+    train_wavelist = [
+        input_dir + 'train_curated/' + row['fname'] if row['noisy_flg'] == 0
+        else input_dir + 'train_noisy/' + row['fname'] for ind, row in train.iterrows()
+    ]
+    test_wavelist = [
+        input_dir + 'test/' + row['fname'] for ind, row in test.iterrows()
+    ]
+
+    # make features
+    if feature_name == 'raw_wave':
+        pass
+
+    elif feature_name == 'logmel':
+        fe_params = config['features']['params']
+        duration = fe_params['duration']
+        n_mels = fe_params['n_mels']
+        n_fft = fe_params['factor__n_fft'] * n_mels
+        fe_dir = pathlib.Path(
+            config['dataset']['intermediate_directory'] +
+            f'logmel+delta_nmels{n_mels}_duration{duration}_nfft{n_fft}/'
+        )
+        if not fe_dir.exists():
+            fe_dir.mkdir()
+        logger.info(f'fe_dir: {str(fe_dir)}')
+        logger.debug(f'fe_dir exists: {fe_dir.exists()}')
+        args_log = {'fe_dir': str(fe_dir)}
+        config.update(args_log)
+
+        if args.force:
+            logger.info('make features.')
+            logger.debug(f'train data processing. {len(train_wavelist)}')
+            wav_to_logmel(train_wavelist, config, fe_dir)
+            logger.debug(f'test data processing. {len(test_wavelist)}')
+            wav_to_logmel(test_wavelist, config, fe_dir)
+
+    elif feature_name == 'mfcc':
+        pass
+
+    # =========================================
+    # === Train Model
+    # =========================================
+
+    # choose training data
+    if args.debug:
+        # use only few data
+        use_index = train.index[:500]
+    else:
+        if config['pre-processing']['data-selection']['name'] == 'ALL':
+            use_index = train.index
+
+        elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
+            silent_wav_list = get_silent_wav_list()
+            idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
+            use_index = idxes_curated
+
+    train = train.iloc[use_index].reset_index(drop=True)
+    logger.info(f'n_use_train_data: {len(train)}')
+    logger.info(f'n_use_test_data: {len(test)}')
+
+    total = pd.concat([train[["fname"]], test[["fname"]]], axis=0, ignore_index=True, sort=False)
+    total["test_flg"] = 1
+    total.iloc[:len(train), 1] = 0   # 1 = test_flg
+    logger.info(f'n_use_total_data: {len(total)}')
+
+    # set fold
+    skf = StratifiedKFold(
+        n_splits=config['cv']['n_splits'],
+        shuffle=config['cv']['shuffle'],
+        random_state=config['cv']['random_state']
+    )
+
+    # train
+    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(total, total["test_flg"])):
+        end = time.time()
+
+        # split dataset
+        trn_set = total.iloc[trn_idx].reset_index(drop=True)
+        y_trn = trn_set["test_flg"].values.reshape(-1, 1)
+        val_set = total.iloc[val_idx].reset_index(drop=True)
+        y_val = val_set["test_flg"].values.reshape(-1, 1)
+        logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
+
+        # define train-loader and valid-loader
+        if feature_name == 'logmel':
+            train_transform = transforms.Compose([
+                ToTensor()
+            ])
+            val_transform = transforms.Compose([
+                ToTensor()
+            ])
+
+            trnSet = FAT_TrainSet_logmel(
+                config=config, dataframe=trn_set, labels=y_trn,
+                transform=train_transform
+            )
+            valSet = FAT_TrainSet_logmel(
+                config=config, dataframe=val_set, labels=y_val,
+                transform=val_transform
+            )
+
+        trn_loader = DataLoader(
+            trnSet, batch_size=config['model']['params']['batch_size'],
+            shuffle=config['model']['params']['shuffle'],
+            num_workers=config['model']['params']['num_workers']
+        )
+        val_loader = DataLoader(
+            valSet, batch_size=config['model']['predict']['test_batch_size'],
+            shuffle=False,
+            num_workers=config['model']['params']['num_workers']
+        )
+
+        # load model
+        model = MODEL_map[config['model']['name']]()
+        model.cuda()
+
+        # setting train parameters
+        criterion = torch.nn.BCEWithLogitsLoss().cuda()
+        optimizer = OPTIMIZER_map[config['model']['optimizer']['name']](model.parameters(), config)
+        scheduler = SCHEDULER_map[config['model']['scheduler']['name']](optimizer, config)
+        torch.backends.cudnn.benchmark = True
+
+        # train model
+        train_on_fold(
+            model, trn_loader, val_loader,
+            criterion, optimizer, scheduler, config, i_fold, logger
+        )
+        time_on_fold = time.strftime('%Hh:%Mm:%Ss', time.gmtime(time.time() - end))
+        logger.info(f'--------------Time on fold {i_fold+1}: {time_on_fold}--------------\n')
+
+    # =========================================
+    # === Check Train Result
+    # =========================================
+    # check total score
+    preds_list = []
+    target_list = []
+    val_fname_list = []
+    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(total, total["test_flg"])):
+        val_set = total.iloc[val_idx].reset_index(drop=True)
+        y_val = val_set["test_flg"].values.reshape(-1, 1)
+        val_fname_list.extend(val_set['fname'].tolist())
+
+        # define train-loader and valid-loader
+        if feature_name == 'logmel':
+            val_transform = transforms.Compose([
+                ToTensor()
+            ])
+            valSet = FAT_TrainSet_logmel(
+                config=config, dataframe=val_set, labels=y_val,
+                transform=val_transform
+            )
+        val_loader = DataLoader(
+            valSet, batch_size=config['model']['params']['batch_size'],
+            shuffle=False,
+            num_workers=config['model']['params']['num_workers']
+        )
+        # load model
+        model = MODEL_map[config['model']['name']]()
+        if config['model']['params']['cuda']:
+            model.load_state_dict(torch.load(model_output_dir / f'weight_best_fold{i_fold+1}.pt'))
+            model.cuda()
+        model.eval()
+
+        with torch.no_grad():
+            for i, (x_batch, y_batch) in enumerate(val_loader):
+                if config['model']['params']['cuda']:
+                    x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
+                output = model(x_batch)
+                preds_list.append(torch.sigmoid(output).cpu().numpy())
+                target_list.append(y_batch.cpu().numpy())
+
+    # summary
+    all_preds = np.concatenate(preds_list)
+    all_target = np.concatenate(target_list)
+    score = roc_auc_score(all_target, all_preds)
+    logger.info(f'total auc: {score}')
+    config.update({'total': {
+        'best_auc': score
+    }})
+
+    # calc auc per samples
+    all_preds = pd.DataFrame(all_preds)
+    val_fname_list = pd.DataFrame(val_fname_list)
+    val_result = pd.concat([val_fname_list, all_preds], axis=1)
+    val_result.columns = ['fname', 'pred']
+    val_result.to_csv(model_output_dir / 'val_result.csv', index=False)
+
+    # =========================================
+    # === Save
+    # =========================================
+    save_path = model_output_dir / 'output.json'
+    save_json(config, save_path, logger)
+
+
+if __name__ == '__main__':
+    main()

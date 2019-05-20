@@ -11,9 +11,9 @@ from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
-from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap
+from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap, _one_sample_positive_class_precisions
 from src.edit_data import get_silent_wav_list
-from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel
+from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel, FAT_ValSet_logmel
 from src.data_transform import wav_to_logmel
 
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
@@ -218,7 +218,6 @@ def main():
 
         # load model
         model = MODEL_map[config['model']['name']]()
-        model.load_state_dict(torch.load(f'./data/output/model_8/weight_best_fold{i_fold+1}.pt'))
         model.cuda()
 
         # setting train parameters
@@ -241,9 +240,11 @@ def main():
     # check total score
     preds_list = []
     target_list = []
+    val_fname_list = []
     for i_fold, (trn_idx, val_idx) in enumerate(skf.split(train, y_train)):
         val_set = train.iloc[val_idx].reset_index(drop=True)
         y_val = y_train[val_idx]
+        val_fname_list.extend(val_set['fname'].tolist())
 
         # define train-loader and valid-loader
         if feature_name == 'logmel':
@@ -283,6 +284,99 @@ def main():
     config.update({'total': {
         'best_lwlrap': lwlrap
     }})
+
+    # calc lwlrap per samples
+    val_result = pd.DataFrame()
+    for i in range(len(val_fname_list)):
+        fname = val_fname_list[i]
+        pos_class_indices, precision_at_hits = _one_sample_positive_class_precisions(all_preds[i], all_target[i])
+        for i_class in range(len(pos_class_indices)):
+            class_name = labels[pos_class_indices[i_class]]
+            precision = precision_at_hits[i_class]
+            val_result = val_result.append([[fname, class_name, precision]])
+    val_result.columns = ['fname', 'class_name', 'precision_at_hits']
+    val_result = pd.merge(val_result, train, on="fname", how="inner")
+    val_result.to_csv(model_output_dir / 'val_result.csv', index=False)
+
+    # =========================================
+    # === Check Train Result (tmp)
+    # =========================================
+    """
+    # check total score
+    preds_list = []
+    target_list = []
+    val_fname_list = []
+    for i_fold, (trn_idx, val_idx) in enumerate(skf.split(train, y_train)):
+        val_set = train.iloc[val_idx].reset_index(drop=True)
+        y_val = y_train[val_idx]
+        val_fname_list.extend(val_set['fname'].tolist())
+
+        # define train-loader and valid-loader
+        if feature_name == 'logmel':
+            val_transform = transforms.Compose([
+                ToTensor()
+            ])
+            valSet = FAT_ValSet_logmel(
+                config=config, dataframe=val_set, labels=y_val,
+                transform=val_transform, fnames=val_set['fname']
+            )
+        val_loader = DataLoader(
+            valSet, batch_size=config['model']['params']['batch_size'],
+            shuffle=False,
+            num_workers=config['model']['params']['num_workers']
+        )
+        # load model
+        model = MODEL_map[config['model']['name']]()
+        if config['model']['params']['cuda']:
+            model.load_state_dict(torch.load(model_output_dir / f'weight_best_fold{i_fold+1}.pt'))
+            model.cuda()
+        model.eval()
+
+        preds_list_tmp = []
+        fname_list = []
+        with torch.no_grad():
+            for i, (x_batch, y_batch, fnames) in enumerate(val_loader):
+                if config['model']['params']['cuda']:
+                    x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
+                output = model(x_batch)
+                preds_list_tmp.append(torch.sigmoid(output).cpu().numpy())
+                fname_list.extend(fnames)
+
+        val_preds = pd.DataFrame(
+            data=np.concatenate(preds_list_tmp),
+            index=fname_list,
+            columns=map(str, range(len(labels)))
+        )
+        from scipy.stats import mstats
+        val_preds = val_preds.groupby(level=0).max()   # group by fname
+        #val_preds = val_preds.groupby(level=0).mean()   # group by fname
+        #val_preds = val_preds.groupby(level=0).agg(mstats.gmean)   # group by fname
+        preds_list.append(val_preds.values)
+        target_list.append(y_val)
+
+    # summary
+    all_preds = np.concatenate(preds_list)
+    all_target = np.concatenate(target_list)
+    score, weight = calculate_per_class_lwlrap(all_target, all_preds)
+    lwlrap = (score * weight).sum()
+    logger.info(f'total lwlrap: {lwlrap}')
+    config.update({'total': {
+        'best_lwlrap': lwlrap
+    }})
+
+    # calc lwlrap per samples
+    val_result = pd.DataFrame()
+    for i in range(len(val_fname_list)):
+        fname = val_fname_list[i]
+        pos_class_indices, precision_at_hits = _one_sample_positive_class_precisions(all_preds[i], all_target[i])
+        for i_class in range(len(pos_class_indices)):
+            class_name = labels[pos_class_indices[i_class]]
+            precision = precision_at_hits[i_class]
+            val_result = val_result.append([[fname, class_name, precision]])
+    val_result.columns = ['fname', 'class_name', 'precision_at_hits']
+    val_result = pd.merge(val_result, train, on="fname", how="inner")
+    val_result.to_csv(model_output_dir / 'val_result.csv', index=False)
+    """
 
     # =========================================
     # === Predict
