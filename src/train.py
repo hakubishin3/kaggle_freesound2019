@@ -213,6 +213,7 @@ def predict_model(model, test_loader, n_classes):
     return test_preds
 
 
+"""
 def mixup(data, one_hot_labels, alpha=1):
     n_labels = one_hot_labels.sum(dim=1)
     multi_label_idx = (n_labels != 1).nonzero().reshape(-1)
@@ -245,4 +246,28 @@ def mixup(data, one_hot_labels, alpha=1):
 
     x = torch.cat((x, multi_data), dim=0)
     y = torch.cat((y, multi_y), dim=0)
+    return x, y
+"""
+
+
+def mixup(data, one_hot_labels, alpha=1):
+    batch_size = data.size()[0]
+    weights = np.random.beta(alpha, alpha, batch_size)
+    weights = torch.from_numpy(weights).type(torch.FloatTensor)
+
+    index = np.random.permutation(batch_size)
+    x1, x2 = data, data[index]
+
+    x = torch.zeros_like(x1)
+    for i in range(batch_size):
+        for c in range(x.size()[1]):
+            x[i][c] = x1[i][c] * weights[i] + x2[i][c] * (1 - weights[i])
+
+    y1 = one_hot_labels
+    y2 = one_hot_labels[index]
+    y = torch.zeros_like(y1)
+
+    for i in range(batch_size):
+        y[i] = y1[i] * weights[i] + y2[i] * (1 - weights[i])
+
     return x, y
