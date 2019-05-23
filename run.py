@@ -159,8 +159,8 @@ def main():
             use_index = idxes_curated
 
     #######################################################################################################
-    train_noisy = train.iloc[idxes_noisy].reset_index(drop=True)
-    y_train_noisy = y_train[idxes_noisy]
+    #train_noisy = train.iloc[idxes_noisy].reset_index(drop=True)
+    #y_train_noisy = y_train[idxes_noisy]
     #######################################################################################################
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
@@ -199,8 +199,8 @@ def main():
         y_val = y_train[val_idx]
 
         #######################################################################################################
-        trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
-        y_trn = np.concatenate((y_trn, y_train_noisy))
+        #trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
+        #y_trn = np.concatenate((y_trn, y_train_noisy))
         #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
@@ -237,7 +237,7 @@ def main():
         # load model
         model = MODEL_map[config['model']['name']]()
         #######################################################################################################
-        #model.load_state_dict(torch.load(f'./data/output/model_27/weight_best_fold{i_fold+1}.pt'))
+        model.load_state_dict(torch.load(f'./data/output/model_31/weight_best_fold{i_fold+1}.pt'))
         #######################################################################################################
         model.cuda()
 
