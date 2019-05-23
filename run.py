@@ -17,7 +17,7 @@ from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_Te
 from src.data_transform import wav_to_logmel
 
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
-from src.loss_func import BCEWithLogitsLoss, FocalLoss, MAE, MSE, Lq
+from src.loss_func import BCEWithLogitsLoss, FocalLoss, MAE, MSE, Lq, CrossEntropyOneHot
 from src.optimizers import opt_Adam, opt_SGD, opt_AdaBound
 from src.schedulers import sche_CosineAnnealingLR
 from src.train import train_on_fold, predict_model
@@ -29,6 +29,7 @@ MODEL_map = {
 LOSS_map = {
     'BCEWithLogitsLoss': BCEWithLogitsLoss,
     'FocalLoss': FocalLoss,
+    'CrossEntropyOneHot': CrossEntropyOneHot,
     'MAE': MAE,
     'MSE': MSE,
     'Lq': Lq
@@ -154,10 +155,22 @@ def main():
         elif config['pre-processing']['data-selection']['name'] == 'ONLY_CURATED':
             silent_wav_list = get_silent_wav_list()
             idxes_curated = train.query('noisy_flg == 0 and fname not in @silent_wav_list').index.values
+            idxes_noisy = train.query('noisy_flg == 1 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
+    #######################################################################################################
+    train_noisy = train.iloc[idxes_noisy].reset_index(drop=True)
+    y_train_noisy = y_train[idxes_noisy]
+    #######################################################################################################
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
+
+    #######################################################################################################
+    # scaling of target
+    #y_train = y_train.astype(float)
+    #for i in range(len(y_train)):
+    #    y_train[i] = y_train[i] / y_train[i].sum()
+    #######################################################################################################
 
     logger.info(f'n_use_train_data: {len(use_index)}')
 
@@ -184,6 +197,11 @@ def main():
         y_trn = y_train[trn_idx]
         val_set = train.iloc[val_idx].reset_index(drop=True)
         y_val = y_train[val_idx]
+
+        #######################################################################################################
+        trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
+        y_trn = np.concatenate((y_trn, y_train_noisy))
+        #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
 
@@ -218,6 +236,9 @@ def main():
 
         # load model
         model = MODEL_map[config['model']['name']]()
+        #######################################################################################################
+        #model.load_state_dict(torch.load(f'./data/output/model_27/weight_best_fold{i_fold+1}.pt'))
+        #######################################################################################################
         model.cuda()
 
         # setting train parameters

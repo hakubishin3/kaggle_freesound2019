@@ -29,6 +29,9 @@ class FocalLoss_(nn.Module):
 
 
 class cross_entropy(torch.nn.Module):
+    """
+    Cross entropy  that accepts soft targets (like [0, 0.1, 0.1, 0.8, 0]).
+    """
     def __init__(self):
         super(cross_entropy, self).__init__()
 
@@ -37,6 +40,10 @@ class cross_entropy(torch.nn.Module):
             return torch.mean(torch.sum(-target * F.log_softmax(input, dim=1), dim=1))
         else:
             return torch.sum(torch.sum(-target * F.log_softmax(input, dim=1), dim=1))
+
+
+def CrossEntropyOneHot(config):
+    return cross_entropy()
 
 
 def BCEWithLogitsLoss(config):
