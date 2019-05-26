@@ -159,9 +159,10 @@ def main():
             use_index = idxes_curated
 
     #######################################################################################################
-    #train_noisy = train.iloc[idxes_noisy].reset_index(drop=True)
-    #y_train_noisy = y_train[idxes_noisy]
+    train_noisy = train.iloc[idxes_noisy].reset_index(drop=True)
+    y_train_noisy = y_train[idxes_noisy]
     #######################################################################################################
+
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
 
@@ -199,8 +200,58 @@ def main():
         y_val = y_train[val_idx]
 
         #######################################################################################################
-        #trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
-        #y_trn = np.concatenate((y_trn, y_train_noisy))
+        # get psuedo label
+        """
+        preds_all = np.zeros((len(train_noisy), len(labels))).astype(np.float32)
+        for i_fold_tmp in range(config['cv']['n_splits']):
+            if i_fold_tmp == i_fold:
+                continue
+
+            # define train-loader and valid-loader
+            if feature_name == 'logmel':
+                val_transform = transforms.Compose([
+                    ToTensor()
+                ])
+                valSet = FAT_ValSet_logmel(
+                    config=config, dataframe=train_noisy, labels=y_train_noisy,
+                    transform=val_transform, fnames=train_noisy['fname']
+                )
+            val_loader = DataLoader(
+                valSet, batch_size=config['model']['params']['batch_size'],
+                shuffle=False,
+                num_workers=config['model']['params']['num_workers']
+            )
+            # load model
+            model = MODEL_map[config['model']['name']]()
+            model.load_state_dict(torch.load(f'./data/output/model_29/weight_best_fold{i_fold_tmp+1}.pt'))
+            model.cuda()
+            model.eval()
+
+            preds_list_tmp = []
+            fname_list = []
+            with torch.no_grad():
+                for i, (x_batch, y_batch, fnames) in enumerate(val_loader):
+                    x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
+                    output = model(x_batch)
+                    preds_list_tmp.append(torch.sigmoid(output).cpu().numpy())
+                    fname_list.extend(fnames)
+
+            val_preds = pd.DataFrame(
+                data=np.concatenate(preds_list_tmp),
+                index=fname_list,
+                columns=map(str, range(len(labels)))
+            )
+            val_preds = val_preds.groupby(level=0).mean()   # group by fname
+            preds_all = preds_all + val_preds.values / (config['cv']['n_splits'] - 1)
+        """
+        #######################################################################################################
+
+        #######################################################################################################
+        """
+        trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
+        # y_trn = np.concatenate((y_trn, y_train_noisy))
+        y_trn = np.concatenate((y_trn, preds_all))
+        """
         #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
@@ -237,7 +288,7 @@ def main():
         # load model
         model = MODEL_map[config['model']['name']]()
         #######################################################################################################
-        model.load_state_dict(torch.load(f'./data/output/model_31/weight_best_fold{i_fold+1}.pt'))
+        model.load_state_dict(torch.load(f'./data/output/model_34/weight_best_fold{i_fold+1}.pt'))
         #######################################################################################################
         model.cuda()
 
