@@ -173,7 +173,69 @@ def main():
     #    y_train[i] = y_train[i] / y_train[i].sum()
     #######################################################################################################
 
-    logger.info(f'n_use_train_data: {len(use_index)}')
+    #######################################################################################################
+    # get true noisy
+    preds_all = np.zeros((len(train_noisy), len(labels))).astype(np.float32)
+    for i_fold_tmp in range(config['cv']['n_splits']):
+        # define train-loader and valid-loader
+        if feature_name == 'logmel':
+            val_transform = transforms.Compose([
+                ToTensor()
+            ])
+            valSet = FAT_ValSet_logmel(
+                config=config, dataframe=train_noisy, labels=y_train_noisy,
+                transform=val_transform, fnames=train_noisy['fname']
+            )
+        val_loader = DataLoader(
+            valSet, batch_size=config['model']['params']['batch_size'],
+            shuffle=False,
+            num_workers=config['model']['params']['num_workers']
+        )
+        # load model
+        model = MODEL_map[config['model']['name']]()
+        model.load_state_dict(torch.load(f'./data/output/model_32/weight_best_fold{i_fold_tmp+1}.pt'))
+        model.cuda()
+        model.eval()
+
+        preds_list_tmp = []
+        fname_list = []
+        with torch.no_grad():
+            for i, (x_batch, y_batch, fnames) in enumerate(val_loader):
+                x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
+                output = model(x_batch)
+                preds_list_tmp.append(torch.sigmoid(output).cpu().numpy())
+                fname_list.extend(fnames)
+
+        val_preds = pd.DataFrame(
+            data=np.concatenate(preds_list_tmp),
+            index=fname_list,
+            columns=map(str, range(len(labels)))
+        )
+        val_preds = val_preds.groupby(level=0).mean()   # group by fname
+        preds_all = preds_all + val_preds.values / (config['cv']['n_splits'])
+
+    # calc lwlrap per samples
+    train_noisy_result = pd.DataFrame()
+    train_noisy_fname_list = train_noisy['fname'].tolist()
+    for i in range(len(train_noisy_fname_list)):
+        fname = train_noisy_fname_list[i]
+        pos_class_indices, precision_at_hits = _one_sample_positive_class_precisions(preds_all[i], y_train_noisy[i])
+        for i_class in range(len(pos_class_indices)):
+            class_name = labels[pos_class_indices[i_class]]
+            precision = precision_at_hits[i_class]
+            train_noisy_result = train_noisy_result.append([[fname, class_name, precision]])
+    train_noisy_result.columns = ['fname', 'class_name', 'precision_at_hits']
+    train_noisy_result = pd.merge(train_noisy_result, train_noisy, on="fname", how="inner")
+
+    precision_per_fname = train_noisy_result.groupby("fname")["precision_at_hits"].mean().reset_index()
+    threshold = 1.0
+    use_index_noisy = precision_per_fname.query("precision_at_hits >= @threshold").index
+
+    train_noisy = train_noisy.iloc[use_index_noisy]
+    y_train_noisy = y_train_noisy[use_index_noisy]
+    #######################################################################################################
+
+    logger.info(f'n_use_train_data: {len(train)}')
 
     # set fold
     if config['cv']['method'] == 'MultilabelStratifiedKFold':
@@ -247,11 +309,9 @@ def main():
         #######################################################################################################
 
         #######################################################################################################
-        """
         trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
         # y_trn = np.concatenate((y_trn, y_train_noisy))
-        y_trn = np.concatenate((y_trn, preds_all))
-        """
+        y_trn = np.concatenate((y_trn, y_train_noisy))
         #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
@@ -288,7 +348,7 @@ def main():
         # load model
         model = MODEL_map[config['model']['name']]()
         #######################################################################################################
-        model.load_state_dict(torch.load(f'./data/output/model_34/weight_best_fold{i_fold+1}.pt'))
+        #model.load_state_dict(torch.load(f'./data/output/model_34/weight_best_fold{i_fold+1}.pt'))
         #######################################################################################################
         model.cuda()
 
