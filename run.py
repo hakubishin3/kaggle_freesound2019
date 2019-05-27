@@ -175,6 +175,7 @@ def main():
 
     #######################################################################################################
     # get true noisy
+    """
     preds_all = np.zeros((len(train_noisy), len(labels))).astype(np.float32)
     for i_fold_tmp in range(config['cv']['n_splits']):
         # define train-loader and valid-loader
@@ -233,6 +234,7 @@ def main():
 
     train_noisy = train_noisy.iloc[use_index_noisy]
     y_train_noisy = y_train_noisy[use_index_noisy]
+    """
     #######################################################################################################
 
     logger.info(f'n_use_train_data: {len(train)}')
@@ -309,9 +311,10 @@ def main():
         #######################################################################################################
 
         #######################################################################################################
+        """
         trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
-        # y_trn = np.concatenate((y_trn, y_train_noisy))
         y_trn = np.concatenate((y_trn, y_train_noisy))
+        """
         #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
@@ -348,7 +351,7 @@ def main():
         # load model
         model = MODEL_map[config['model']['name']]()
         #######################################################################################################
-        #model.load_state_dict(torch.load(f'./data/output/model_34/weight_best_fold{i_fold+1}.pt'))
+        model.load_state_dict(torch.load(f'./data/output/model_36/weight_best_fold{i_fold+1}.pt'))
         #######################################################################################################
         model.cuda()
 
