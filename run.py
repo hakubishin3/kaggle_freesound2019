@@ -168,14 +168,15 @@ def main():
 
     #######################################################################################################
     # scaling of target
-    #y_train = y_train.astype(float)
-    #for i in range(len(y_train)):
-    #    y_train[i] = y_train[i] / y_train[i].sum()
+    """
+    y_train = y_train.astype(float)
+    for i in range(len(y_train)):
+        y_train[i] = y_train[i] / y_train[i].sum()
+    """
     #######################################################################################################
 
     #######################################################################################################
     # get true noisy
-    """
     preds_all = np.zeros((len(train_noisy), len(labels))).astype(np.float32)
     for i_fold_tmp in range(config['cv']['n_splits']):
         # define train-loader and valid-loader
@@ -234,7 +235,8 @@ def main():
 
     train_noisy = train_noisy.iloc[use_index_noisy]
     y_train_noisy = y_train_noisy[use_index_noisy]
-    """
+    train_noisy.to_csv(model_output_dir / 'use_train_noisy.csv', index=False)
+    np.save(model_output_dir / 'use_y_train_noisy.npy', y_train_noisy)
     #######################################################################################################
 
     logger.info(f'n_use_train_data: {len(train)}')
@@ -311,10 +313,8 @@ def main():
         #######################################################################################################
 
         #######################################################################################################
-        """
         trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
         y_trn = np.concatenate((y_trn, y_train_noisy))
-        """
         #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
