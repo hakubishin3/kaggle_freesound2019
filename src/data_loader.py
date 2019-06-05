@@ -75,6 +75,7 @@ class FAT_TrainSet_logmel(Dataset):
 
         # Read the logmel pkl
         logmel = load_data(file_path)
+        logmel = np.concatenate((logmel, logmel), axis=2)   # (3, n_mel, 2*n_times)
 
         # Random offset / Padding
         if logmel.shape[2] > input_length:   # logmel.shape = (3, n_mel, xx)
@@ -124,6 +125,7 @@ class FAT_TestSet_logmel(Dataset):
 
         # Read the logmel pkl
         logmel = load_data(file_path)
+        logmel = np.concatenate((logmel, logmel), axis=2)   # (3, n_mel, 2*n_times)
 
         # Random offset / Padding
         if logmel.shape[2] > input_length:   # logmel.shape = (3, n_mel, xx)
@@ -178,6 +180,7 @@ class FAT_ValSet_logmel(Dataset):
 
         # Read the logmel pkl
         logmel = load_data(file_path)
+        logmel = np.concatenate((logmel, logmel), axis=2)   # (3, n_mel, 2*n_times)
 
         # Random offset / Padding
         if logmel.shape[2] > input_length:   # logmel.shape = (3, n_mel, xx)

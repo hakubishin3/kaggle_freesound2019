@@ -44,6 +44,12 @@ def wav_to_logmel(wavelist, config, fe_dir):
     )
 
 
+def wav_to_mfcc(wavelist, config, fe_dir):
+    _ = Parallel(n_jobs=-1, verbose=1)(
+        [delayed(tsfm_mfcc)(wavefile, config, fe_dir) for wavefile in wavelist]
+    )
+
+
 def tsfm_logmel(wavefile, config, fe_dir, suffix=''):
     # get params
     params = config['features']['params']
@@ -78,6 +84,44 @@ def tsfm_logmel(wavefile, config, fe_dir, suffix=''):
         delta = librosa.feature.delta(logmel).astype(np.float32)
         accelerate = librosa.feature.delta(logmel, order=2).astype(np.float32)
         feats = np.stack((logmel, delta, accelerate))   # (3, n_mels, xx)
+
+    # save
+    p_name = fe_dir / (os.path.splitext(os.path.basename(wavefile))[0] + suffix + '.pkl')
+    save_data(p_name, feats)
+
+
+def tsfm_mfcc(wavefile, config, fe_dir, suffix=''):
+    # get params
+    params = config['features']['params']
+    sampling_rate = params['sampling_rate']
+    duration = params['duration']
+    hop_length = params['factor__hop_length'] * duration
+    n_mels = params['n_mels']
+    n_fft = params['factor__n_fft'] * n_mels
+    fmin = params['fmin']
+    fmax = sampling_rate // params['factor__fmax']
+    trim = params['trim']
+    samples = sampling_rate * duration
+
+    # get wav-data
+    min_data_length = samples
+    data = read_audio(wavefile, sampling_rate, min_data_length, trim)
+
+    # calc mfcc
+    if len(data) == 0:
+        # If file is empty, fill mfcc with 0.
+        print("empty file: ", file_path)
+        mfcc = np.zeros((n_mels, n_mels))
+        feats = np.stack((mfcc, mfcc, mfcc))   # (3, n_mels, xx)
+    else:
+        mfcc = librosa.feature.mfcc(
+            data, sr=sampling_rate,
+            n_fft=n_fft, hop_length=hop_length, n_mfcc=n_mels
+        )
+        mfcc = mfcc.astype(np.float32)
+        delta = librosa.feature.delta(mfcc).astype(np.float32)
+        accelerate = librosa.feature.delta(mfcc, order=2).astype(np.float32)
+        feats = np.stack((mfcc, delta, accelerate))   # (3, n_mels, xx)
 
     # save
     p_name = fe_dir / (os.path.splitext(os.path.basename(wavefile))[0] + suffix + '.pkl')

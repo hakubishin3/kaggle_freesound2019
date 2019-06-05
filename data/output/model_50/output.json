@@ -1,0 +1,168 @@
+{
+    "features": {
+        "name": "logmel",
+        "params": {
+            "sampling_rate": 44100,
+            "duration": 2,
+            "factor__hop_length": 347,
+            "n_mels": 128,
+            "factor__n_fft": 20,
+            "fmin": 20,
+            "factor__fmax": 2,
+            "trim": true
+        }
+    },
+    "offline-augment": {
+        "enabled": false,
+        "n_aug": 12,
+        "time_stretch": {
+            "enabled": true,
+            "stretch_rates": [
+                0.85,
+                0.9,
+                0.95,
+                1.0,
+                1.05,
+                1.1,
+                1.15,
+                1.2,
+                1.25
+            ]
+        },
+        "pitch_shift": {
+            "enabled": true,
+            "n_steps": [
+                -2.0,
+                -1.5,
+                -1.0,
+                -0.5,
+                0.0,
+                0.5,
+                1.0,
+                1.5,
+                2.0
+            ]
+        },
+        "add-noise": {
+            "enabled": false
+        }
+    },
+    "cv": {
+        "method": "MultilabelStratifiedKFold",
+        "n_splits": 5,
+        "random_state": 71,
+        "shuffle": true
+    },
+    "model": {
+        "name": "simple_2d_cnn_logmel",
+        "params": {
+            "input_length": 128,
+            "shuffle": true,
+            "num_workers": 8,
+            "cuda": true,
+            "batch_size": 64,
+            "n_epochs": 531,
+            "print_epoch": 1,
+            "early_stopping_patience": 50
+        },
+        "loss": {
+            "name": "FocalLoss",
+            "gamma": 2
+        },
+        "optimizer": {
+            "name": "Adam",
+            "lr": 0.001,
+            "amsgrad": false
+        },
+        "scheduler": {
+            "enabled": true,
+            "name": "CosineAnnealingLR",
+            "T_max": 10,
+            "eta_min": 1e-05
+        },
+        "mixup": {
+            "enabled": false,
+            "alpha": 2
+        },
+        "specAug": {
+            "enabled": true,
+            "F": 27,
+            "F_num_masks": 2,
+            "T": 27,
+            "T_num_masks": 2,
+            "replace_with_zero": false
+        },
+        "predict": {
+            "test_batch_size": 256,
+            "num_workers": 8,
+            "tta": 40
+        }
+    },
+    "dataset": {
+        "input_directory": "data/input/",
+        "intermediate_directory": "data/interim/",
+        "output_directory": "data/output/",
+        "files": {
+            "meta": {
+                "train_curated": "train_curated.csv",
+                "train_noisy": "train_noisy.csv",
+                "test": "sample_submission.csv"
+            },
+            "wav": {
+                "train_curated": "train_curated/",
+                "train_noisy": "train_noisy/",
+                "test": "test/"
+            }
+        }
+    },
+    "pre-processing": {
+        "data-selection": {
+            "name": "ONLY_CURATED"
+        }
+    },
+    "args": {
+        "config": "configs/model_50.json",
+        "debug_mode": false,
+        "force": false
+    },
+    "model_output_dir": "data/output/model_50",
+    "fe_dir": "data/interim/logmel+delta_nmels128_duration2_nfft2560",
+    "train_result_fold1": {
+        "best_epoch": 32,
+        "best_lwlrap": 0.8679682721618434,
+        "best_loss": 0.005128753837198019,
+        "best_lwlrap_train": 0.9599696610481641,
+        "best_loss_train": 0.0024231689582977973
+    },
+    "train_result_fold2": {
+        "best_epoch": 29,
+        "best_lwlrap": 0.8663584496937844,
+        "best_loss": 0.005313546163961291,
+        "best_lwlrap_train": 0.9658723027229574,
+        "best_loss_train": 0.0021735041675763947
+    },
+    "train_result_fold3": {
+        "best_epoch": 33,
+        "best_lwlrap": 0.8557554995218859,
+        "best_loss": 0.0055812225909903646,
+        "best_lwlrap_train": 0.9675039576143617,
+        "best_loss_train": 0.002035064162642118
+    },
+    "train_result_fold4": {
+        "best_epoch": 29,
+        "best_lwlrap": 0.848752656595418,
+        "best_loss": 0.0056860343320295215,
+        "best_lwlrap_train": 0.9668386977727277,
+        "best_loss_train": 0.001917121808103744
+    },
+    "train_result_fold5": {
+        "best_epoch": 9,
+        "best_lwlrap": 0.8555131241507035,
+        "best_loss": 0.0060177152045071125,
+        "best_lwlrap_train": 0.9416568541710933,
+        "best_loss_train": 0.004044448886628425
+    },
+    "total": {
+        "best_lwlrap": 0.8528702059825637
+    }
+}
