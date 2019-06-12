@@ -1,6 +1,8 @@
 # ignore files
 *csv
 *gz
+*pyc
+*sh
 *pkl
 *pickle
 *npy

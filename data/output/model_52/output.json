@@ -95,7 +95,7 @@
         "predict": {
             "test_batch_size": 256,
             "num_workers": 8,
-            "tta": 40
+            "tta": 20
         }
     },
     "dataset": {
@@ -156,6 +156,7 @@
         "best_loss_train": 0.002341717083038667
     },
     "total": {
-        "best_lwlrap": 0.8415510666479834
+        "best_lwlrap": 0.8415510666479834,
+        "best_lwlrap_tta": 0.8799097445148923
     }
 }

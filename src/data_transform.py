@@ -5,21 +5,6 @@ from joblib import Parallel, delayed
 from .utils import save_data
 
 
-def standarize(X, eps=1e-6):
-    """ X is 2d-array. X.shape = (xx, yy)
-    """
-    max_ = X.max()
-    min_ = X.min()
-    if (max_ - min_) > eps:
-        # normalize to [0, 1]
-        X = (X - min_) / (max_ - min_)
-    else:
-        # just zero
-        X = np.zeros_like(X)
-
-    return X
-
-
 def read_audio(wavefile: str, sampling_rate: int, min_data_length: int, trim: bool):
     # load wave data
     y, _ = librosa.load(wavefile, sr=sampling_rate)

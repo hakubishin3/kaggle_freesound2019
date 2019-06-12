@@ -11,28 +11,28 @@ from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
-from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap, _one_sample_positive_class_precisions
+from src.utils import get_module_logger, seed_everything, save_json, calculate_per_class_lwlrap
 from src.edit_data import get_silent_wav_list
-from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel, FAT_ValSet_logmel
+from src.data_loader import ToTensor, get_meta_data, FAT_TrainSet_logmel, FAT_TestSet_logmel
 from src.data_transform import wav_to_logmel, wav_to_mfcc
 
 from src.networks.simple_2d_cnn import simple_2d_cnn_logmel
-from src.loss_func import BCEWithLogitsLoss, FocalLoss, MAE, MSE, Lq, CrossEntropyOneHot
+from src.networks.resnet import resnet50_logmel, resnet18_logmel
+from src.loss_func import BCEWithLogitsLoss, FocalLoss, CrossEntropyOneHot
 from src.optimizers import opt_Adam, opt_SGD, opt_AdaBound
 from src.schedulers import sche_CosineAnnealingLR
 from src.train import train_on_fold, predict_model
 
 MODEL_map = {
-    'simple_2d_cnn_logmel': simple_2d_cnn_logmel
+    'simple_2d_cnn_logmel': simple_2d_cnn_logmel,
+    'resnet50_logmel': resnet50_logmel,
+    'resnet18_logmel': resnet18_logmel
 }
 
 LOSS_map = {
     'BCEWithLogitsLoss': BCEWithLogitsLoss,
     'FocalLoss': FocalLoss,
     'CrossEntropyOneHot': CrossEntropyOneHot,
-    'MAE': MAE,
-    'MSE': MSE,
-    'Lq': Lq
 }
 
 OPTIMIZER_map = {
@@ -87,7 +87,7 @@ def main():
     })
 
     # fix seed
-    seed_everything(81)
+    seed_everything(71)
 
     # =========================================
     # === Data Processing
@@ -111,10 +111,7 @@ def main():
     ]
 
     # make features
-    if feature_name == 'raw_wave':
-        pass
-
-    elif feature_name == 'logmel':
+    if feature_name == 'logmel':
         fe_params = config['features']['params']
         duration = fe_params['duration']
         n_mels = fe_params['n_mels']
@@ -178,99 +175,8 @@ def main():
             idxes_noisy = train.query('noisy_flg == 1 and fname not in @silent_wav_list').index.values
             use_index = idxes_curated
 
-    #######################################################################################################
-    train_noisy = train.iloc[idxes_noisy].reset_index(drop=True)
-    y_train_noisy = y_train[idxes_noisy]
-    #######################################################################################################
-
     train = train.iloc[use_index].reset_index(drop=True)
     y_train = y_train[use_index]
-
-    #######################################################################################################
-    # scaling of target
-    """
-    y_train = y_train.astype(float)
-    for i in range(len(y_train)):
-        y_train[i] = y_train[i] / y_train[i].sum()
-    """
-    #######################################################################################################
-
-    #######################################################################################################
-    # get true noisy
-    """
-    preds_all = np.zeros((len(train_noisy), len(labels))).astype(np.float32)
-    for i_fold_tmp in range(config['cv']['n_splits']):
-        # define train-loader and valid-loader
-        if feature_name == 'logmel' or feature_name == 'mfcc':
-            val_transform = transforms.Compose([
-                ToTensor()
-            ])
-            valSet = FAT_ValSet_logmel(
-                config=config, dataframe=train_noisy, labels=y_train_noisy,
-                transform=val_transform, fnames=train_noisy['fname']
-            )
-        val_loader = DataLoader(
-            valSet, batch_size=config['model']['params']['batch_size'],
-            shuffle=False,
-            num_workers=config['model']['params']['num_workers']
-        )
-        # load model
-        model = MODEL_map[config['model']['name']]()
-        model.load_state_dict(torch.load(f'./data/output/model_29/weight_best_fold{i_fold_tmp+1}.pt'))
-        model.cuda()
-        model.eval()
-
-        preds_list_tmp = []
-        fname_list = []
-        with torch.no_grad():
-            for i, (x_batch, y_batch, fnames) in enumerate(val_loader):
-                x_batch, y_batch = x_batch.cuda(), y_batch.cuda(non_blocking=True)
-                output = model(x_batch)
-                preds_list_tmp.append(torch.sigmoid(output).cpu().numpy())
-                fname_list.extend(fnames)
-
-        val_preds = pd.DataFrame(
-            data=np.concatenate(preds_list_tmp),
-            index=fname_list,
-            columns=map(str, range(len(labels)))
-        )
-        val_preds = val_preds.groupby(level=0).mean()   # group by fname
-        preds_all = preds_all + val_preds.values / (config['cv']['n_splits'])
-
-    # calc lwlrap per samples
-    train_noisy_result = pd.DataFrame()
-    train_noisy_fname_list = train_noisy['fname'].tolist()
-    for i in range(len(train_noisy_fname_list)):
-        fname = train_noisy_fname_list[i]
-        pos_class_indices, precision_at_hits = _one_sample_positive_class_precisions(preds_all[i], y_train_noisy[i])
-        for i_class in range(len(pos_class_indices)):
-            class_name = labels[pos_class_indices[i_class]]
-            precision = precision_at_hits[i_class]
-            train_noisy_result = train_noisy_result.append([[fname, class_name, precision]])
-    train_noisy_result.columns = ['fname', 'class_name', 'precision_at_hits']
-    train_noisy_result = pd.merge(train_noisy_result, train_noisy, on="fname", how="inner")
-
-    precision_per_fname = train_noisy_result.groupby("fname")["precision_at_hits"].mean().reset_index()
-    threshold = 0.0
-    use_index_noisy = precision_per_fname.query("precision_at_hits >= @threshold").index
-
-    train_noisy = train_noisy.iloc[use_index_noisy]
-    # y_train_noisy = preds_all[use_index_noisy]
-    y_train_noisy = y_train_noisy[use_index_noisy] * 0.65 + preds_all[use_index_noisy] * 0.35
-    train_noisy.to_csv(model_output_dir / 'use_train_noisy.csv', index=False)
-    np.save(model_output_dir / 'use_y_train_noisy.npy', y_train_noisy)
-    """
-
-    """
-    train_noisy = pd.read_csv('data/output/model_38/use_train_noisy.csv')
-    y_train_noisy = np.load('data/output/model_38/use_y_train_noisy.npy')
-
-    # scaling of target
-    y_train_noisy = y_train_noisy.astype(float)
-    for i in range(len(y_train_noisy)):
-        y_train_noisy[i] = y_train_noisy[i] / y_train_noisy[i].sum()
-    """
-    #######################################################################################################
 
     logger.info(f'n_use_train_data: {len(train)}')
 
@@ -297,11 +203,6 @@ def main():
         y_trn = y_train[trn_idx]
         val_set = train.iloc[val_idx].reset_index(drop=True)
         y_val = y_train[val_idx]
-
-        #######################################################################################################
-        # trn_set = pd.concat([trn_set, train_noisy], axis=0, ignore_index=True, sort=False)
-        # y_trn = np.concatenate((y_trn, y_train_noisy))
-        #######################################################################################################
 
         logger.info(f'Fold {i_fold+1}, train samples: {len(trn_set)}, val samples: {len(val_set)}')
 
@@ -336,9 +237,6 @@ def main():
 
         # load model
         model = MODEL_map[config['model']['name']]()
-        #######################################################################################################
-        model.load_state_dict(torch.load(f'./data/output/model_53/weight_best_fold{i_fold+1}.pt'))
-        #######################################################################################################
         model.cuda()
 
         # setting train parameters
@@ -405,21 +303,6 @@ def main():
     config.update({'total': {
         'best_lwlrap': lwlrap
     }})
-    np.save(model_output_dir / 'all_preds_vall.npy', all_preds)
-    np.save(model_output_dir / 'val_fname_list.npy', val_fname_list)
-
-    # calc lwlrap per samples
-    val_result = pd.DataFrame()
-    for i in range(len(val_fname_list)):
-        fname = val_fname_list[i]
-        pos_class_indices, precision_at_hits = _one_sample_positive_class_precisions(all_preds[i], all_target[i])
-        for i_class in range(len(pos_class_indices)):
-            class_name = labels[pos_class_indices[i_class]]
-            precision = precision_at_hits[i_class]
-            val_result = val_result.append([[fname, class_name, precision]])
-    val_result.columns = ['fname', 'class_name', 'precision_at_hits']
-    val_result = pd.merge(val_result, train, on="fname", how="inner")
-    val_result.to_csv(model_output_dir / 'val_result.csv', index=False)
 
     # =========================================
     # === Predict
