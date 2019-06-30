@@ -28,8 +28,11 @@ Step2. Re-train the model  with only curated data
 - Augmentation: RandomCrop, specAugment
 - Loss: FocalLoss
 
+Public LB score of the model trained with only curated data: 0.685  
+Public LB score of the model trained with curated data and noisy data: 0.712
 
 
 ## Winning solutions
 
-リンク
+[Freesound2019 Summary](https://github.com/hakubishin3/kaggle_freesound2019/blob/master/freesound_memo.md)
+
