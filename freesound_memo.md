@@ -40,7 +40,7 @@ Discussion: https://www.kaggle.com/c/freesound-audio-tagging-2019/discussion/979
 Github: https://github.com/ex4sperans/freesound-classification/tree/master  
 
 - Max-poolingの代わりにRNNを使うケースも試した。精度は悪くなったがアンサンブル要員として良く機能した。
-- ランクに基づく損失関数を使いたかったので、LSEP loss(https://arxiv.org/abs/1704.03135)を採用した。CV0.015分の改善が得られた。
+- ランクに基づく損失関数を使いたかったので、LSEP loss(https://arxiv.org/abs/1704.03135) を採用した。CV0.015分の改善が得られた。
 
 - curatedデータのみで学習したモデルでnoisyデータをpredictし、noisyの元のラベルと予測結果が一致するものを採用しcuratedデータセットに加える。採用されたnoisyデータの数が5k分に達するまで繰り返した。
 
